@@ -31,6 +31,11 @@ It's the default for any URL you enter yourself.
 - **In the toolbar:** choose **Custom URL…**, paste the address, keep **Touch table (no tools)**, then press **Load**. Switch between **Flat**, **3D** and **Enter VR** as usual.
 - **As a link:** `/__fastsim/?src=<url>&layout=touch`
 
+In touch mode the page sees a real touch device. `navigator.maxTouchPoints` is 10, `ontouchstart` exists, and `matchMedia('(pointer: coarse)')` / `(hover: none)` match.
+So apps and libraries that check for a touchscreen use their touch code.
+Drags send `pointermove` (with `movementX/Y`) and `touchmove` events. Like a real touchscreen, they don't send `mousemove`.
+In the flat view, the mouse wheel scrolls whatever is under the pointer.
+
 How interactive it is depends on where the page is hosted:
 
 | Content | Flat view | 3D / VR |
@@ -111,7 +116,10 @@ Use it to put text in front of each quiz station, draw arrows next to the dial, 
 
 ## The 3D room
 
-The 3D and VR views put the table in a small gallery: a patterned museum carpet in warm colours, and walls with frosted windows where people walk past as silhouettes.
+The 3D and VR views put the table in a gallery about 20 × 20 m, with a patterned museum carpet in warm colours.
+One wall is floor-to-ceiling glass with slim vertical mullions. Through it you see a grassy square, a concrete path crossing it, trees and a blue sky.
+The outside is real 3D geometry, so it has proper depth and parallax in VR.
+
 Choose the table style with the picker in the toolbar (it appears in 3D view) or with `?furniture=`:
 
 - **Table + stools**: the table on legs, with upholstered cylinder stools in several colours around it. The front-centre is left clear so you can stand there.

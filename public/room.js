@@ -1,15 +1,19 @@
-// The gallery around the table: a patterned museum carpet, walls with
-// frosted windows (people passing by outside as silhouettes), and the two
-// furniture styles: a table on legs with fabric stools, or a steel plinth.
-// Everything is procedural (canvas textures), so there are no assets to load.
+// The gallery around the table: a patterned museum carpet, a floor-to-ceiling
+// glass wall looking out over a grassy square with a concrete path under a
+// blue sky, and the two furniture styles: a table on legs with fabric
+// stools, or a steel plinth.
+// Everything is procedural (geometry + canvas textures): nothing to download.
 
 import * as THREE from 'three';
 
-const ROOM = { w: 10, d: 10, h: 3.6 };
+const ROOM = { w: 20, d: 20, h: 4.2 };
 
 // ------------------------------------------------------------------ room
 
-/** The room, centred on (cx, cz). */
+/**
+ * The room. (cx, cz) is its centre; the glass wall is the far (-z) wall,
+ * so put the centre behind the table to have the view in front of it.
+ */
 export function buildRoom(cx, cz) {
   const room = new THREE.Group();
   room.position.set(cx, 0, cz);
@@ -22,29 +26,30 @@ export function buildRoom(cx, cz) {
 
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xe9dfd0, roughness: 0.95 });
   const skirtMat = new THREE.MeshStandardMaterial({ color: 0x5a3b28, roughness: 0.6 });
-  const walls = [
-    { x: 0, z: -ROOM.d / 2, ry: 0, windows: 3 }, // far wall, facing the visitor
-    { x: -ROOM.w / 2, z: 0, ry: Math.PI / 2, windows: 2 }, // left
-    { x: ROOM.w / 2, z: 0, ry: -Math.PI / 2, windows: 0 }, // right
-    { x: 0, z: ROOM.d / 2, ry: Math.PI, windows: 0 } // behind
-  ];
-  walls.forEach((w, i) => {
+  // Solid walls on three sides; the far wall is glass.
+  for (const w of [
+    { x: -ROOM.w / 2, z: 0, ry: Math.PI / 2, len: ROOM.d },
+    { x: ROOM.w / 2, z: 0, ry: -Math.PI / 2, len: ROOM.d },
+    { x: 0, z: ROOM.d / 2, ry: Math.PI, len: ROOM.w }
+  ]) {
     const g = new THREE.Group();
     g.position.set(w.x, 0, w.z);
     g.rotation.y = w.ry;
-    const len = i % 2 ? ROOM.d : ROOM.w;
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(len, ROOM.h), wallMat);
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(w.len, ROOM.h), wallMat);
     wall.position.y = ROOM.h / 2;
-    const skirt = new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, 0.02), skirtMat);
+    const skirt = new THREE.Mesh(new THREE.BoxGeometry(w.len, 0.12, 0.02), skirtMat);
     skirt.position.set(0, 0.06, 0.01);
     g.add(wall, skirt);
-    for (let k = 0; k < w.windows; k++) {
-      const win = buildWindow(2.0, 2.1, i * 10 + k);
-      win.position.set((k - (w.windows - 1) / 2) * 2.9, 1.55, 0.02);
-      g.add(win);
-    }
     room.add(g);
-  });
+  }
+
+  const glassWall = buildGlassWall(ROOM.w, ROOM.h);
+  glassWall.position.z = -ROOM.d / 2;
+  room.add(glassWall);
+
+  const outside = buildOutside();
+  outside.position.z = -ROOM.d / 2;
+  room.add(outside);
 
   const ceiling = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.w, ROOM.d).rotateX(Math.PI / 2),
@@ -53,37 +58,99 @@ export function buildRoom(cx, cz) {
   ceiling.position.y = ROOM.h;
   room.add(ceiling);
 
-  // Warm gallery lighting, with cooler daylight from the windows.
-  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x6a3f2c, 1.0);
-  const day = new THREE.DirectionalLight(0xdfeaff, 0.8);
-  day.position.set(-3, 3, -5);
-  const lamp = new THREE.PointLight(0xffd9a8, 6, 8, 1.6);
-  lamp.position.set(0, ROOM.h - 0.4, 1);
-  room.add(hemi, day, lamp);
+  // Warm gallery lighting, with cool daylight pouring in through the glass.
+  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x6a3f2c, 0.9);
+  const day = new THREE.DirectionalLight(0xeaf2ff, 1.1);
+  day.position.set(-2, 6, -ROOM.d / 2 - 6);
+  day.target.position.set(0, 0, 0);
+  const lamp = new THREE.PointLight(0xffd9a8, 8, 12, 1.6);
+  lamp.position.set(0, ROOM.h - 0.4, 0);
+  room.add(hemi, day, day.target, lamp);
   return room;
 }
 
-function buildWindow(w, h, seed) {
+/** Floor-to-ceiling glazing: slim vertical mullions only, head and sill channels. */
+function buildGlassWall(width, height) {
   const g = new THREE.Group();
+  const frame = new THREE.MeshStandardMaterial({ color: 0x2b2d31, metalness: 0.6, roughness: 0.4 });
   const glass = new THREE.Mesh(
-    new THREE.PlaneGeometry(w, h),
-    new THREE.MeshBasicMaterial({ map: windowTexture(seed), toneMapped: false })
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshPhysicalMaterial({ color: 0xdfeef5, transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0, depthWrite: false })
   );
+  glass.position.y = height / 2;
   g.add(glass);
-  const frame = new THREE.MeshStandardMaterial({ color: 0x3b2a20, roughness: 0.5 });
-  const t = 0.08;
-  for (const [fw, fh, x, y] of [
-    [w + 2 * t, t, 0, h / 2 + t / 2], [w + 2 * t, t, 0, -h / 2 - t / 2],
-    [t, h, -w / 2 - t / 2, 0], [t, h, w / 2 + t / 2, 0],
-    [0.035, h, 0, 0], [w, 0.035, 0, h * 0.12] // mullion and transom
-  ]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, 0.06), frame);
-    bar.position.set(x, y, 0.03);
+  const bays = Math.round(width / 1.6);
+  for (let i = 0; i <= bays; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, height, 0.12), frame);
+    m.position.set(-width / 2 + (i * width) / bays, height / 2, 0);
+    g.add(m);
+  }
+  for (const y of [0.04, height - 0.05]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(width, y < 1 ? 0.08 : 0.1, 0.14), frame);
+    bar.position.y = y;
     g.add(bar);
   }
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.04, 0.2), frame);
-  sill.position.set(0, -h / 2 - t, 0.1);
-  g.add(sill);
+  return g;
+}
+
+/** Outside the glass (built toward -z): grassy square, concrete path, trees, sky. */
+function buildOutside() {
+  const g = new THREE.Group();
+  const grass = new THREE.Mesh(
+    new THREE.PlaneGeometry(160, 120).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 })
+  );
+  grass.position.set(0, -0.02, -60);
+  g.add(grass);
+
+  // A paved strip along the building, then the path crossing the square.
+  const concrete = new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.9 });
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(160, 2.5).rotateX(-Math.PI / 2), concrete);
+  apron.position.set(0, -0.01, -1.25);
+  const pathMat = concrete.clone();
+  pathMat.map = concreteTexture(2.5, 70);
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 70).rotateX(-Math.PI / 2), pathMat);
+  path.position.set(0, -0.005, -36);
+  path.rotation.y = 0.5; // cuts diagonally across the square
+  const crossMat = concrete.clone();
+  crossMat.map = concreteTexture(2.2, 120);
+  const cross = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 120).rotateX(-Math.PI / 2), crossMat);
+  cross.rotation.y = Math.PI / 2;
+  cross.position.set(0, -0.006, -22);
+  g.add(apron, path, cross);
+
+  // Trees around the square.
+  const r = rng(42);
+  const trunk = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 1 });
+  const leaves = [0x3f7d3a, 0x4f8f3f, 0x386b34].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }));
+  const canopyGeo = new THREE.IcosahedronGeometry(1, 1);
+  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1, 8);
+  for (let i = 0; i < 26; i++) {
+    const x = (r() - 0.5) * 70, z = -10 - r() * 50;
+    if (Math.abs(z + 22) < 2.5 || Math.abs(x - (z + 36) * Math.tan(0.5)) < 3) continue; // keep the paths clear
+    const s = 0.8 + r() * 0.9;
+    const t = new THREE.Mesh(trunkGeo, trunk);
+    t.scale.set(s, 2.2 * s, s);
+    t.position.set(x, 1.1 * s, z);
+    const c = new THREE.Mesh(canopyGeo, leaves[i % 3]);
+    c.scale.set(1.8 * s, 1.6 * s, 1.8 * s);
+    c.position.set(x, 2.2 * s + 1.2 * s, z);
+    g.add(t, c);
+  }
+
+  // Sky dome: deep blue overhead fading to pale at the horizon.
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(90, 32, 16),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: { top: { value: new THREE.Color(0x2f6fd6) }, horizon: { value: new THREE.Color(0xcfe6fb) } },
+      vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = clamp(vP.y, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.55)), 1.0); }'
+    })
+  );
+  sky.position.set(0, 0, -30);
+  g.add(sky);
   return g;
 }
 
@@ -252,79 +319,39 @@ function carpetTexture(repeat) {
   }, { repeat }));
 }
 
-/** Frosted daylight with blurred people walking past. */
-function windowTexture(seed) {
-  return cached(`win${seed}`, () => {
-    const t = canvasTex(512, (g, S) => {
-      const sky = g.createLinearGradient(0, 0, 0, S);
-      sky.addColorStop(0, '#f6f8fb');
-      sky.addColorStop(0.6, '#e4ebf2');
-      sky.addColorStop(1, '#cfd6dc');
-      g.fillStyle = sky;
-      g.fillRect(0, 0, S, S);
-      const r = rng(seed * 97 + 13);
-      // People further from the glass: smaller, paler, blurrier. Draw them first.
-      const people = Array.from({ length: 2 + Math.floor(r() * 4) }, () => ({ x: r() * S, depth: r() }))
-        .sort((a, b) => b.depth - a.depth);
-      for (const p of people) {
-        g.filter = `blur(${4 + p.depth * 8}px)`;
-        const h = S * (0.85 - p.depth * 0.3);
-        person(g, p.x, S * 1.02, h, r, `rgba(52, 56, 64, ${0.75 - p.depth * 0.4})`);
-      }
-      g.filter = 'none';
-    });
-    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-    return t;
-  });
+function grassTexture() {
+  return cached('grass', () => canvasTex(512, (g, S) => {
+    g.fillStyle = '#5f8f3e';
+    g.fillRect(0, 0, S, S);
+    const r = rng(5);
+    for (let i = 0; i < 9000; i++) {
+      const v = r();
+      g.fillStyle = v < 0.5 ? 'rgba(80,130,50,.5)' : v < 0.85 ? 'rgba(120,165,70,.45)' : 'rgba(60,100,40,.5)';
+      g.fillRect(r() * S, r() * S, 2, 3 + r() * 4);
+    }
+  }, { repeat: 60 }));
 }
 
-// A soft, frosted-glass silhouette: head, shoulders, arms, coat, legs mid-stride.
-function person(g, x, feet, height, r, colour) {
-  const u = height / 10; // one "head unit" is ~1/8 of height; keep it simple
-  const headR = u * 0.62;
-  const neck = feet - height + headR * 2.1;
-  const shoulderW = u * 2.1, hipW = u * 1.5;
-  const hip = feet - height * 0.47;
-  const stride = (r() - 0.5) * u * 1.6;
-  g.fillStyle = colour;
-  g.strokeStyle = colour;
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  // head
-  g.beginPath();
-  g.ellipse(x, feet - height + headR, headR * 0.85, headR, 0, 0, Math.PI * 2);
-  g.fill();
-  // torso / coat
-  g.beginPath();
-  g.moveTo(x - u * 0.35, neck - u * 0.1);
-  g.quadraticCurveTo(x - shoulderW / 2, neck, x - shoulderW / 2, neck + u * 0.7);
-  g.lineTo(x - hipW / 2 - u * 0.15, hip + u * 0.4);
-  g.lineTo(x + hipW / 2 + u * 0.15, hip + u * 0.4);
-  g.lineTo(x + shoulderW / 2, neck + u * 0.7);
-  g.quadraticCurveTo(x + shoulderW / 2, neck, x + u * 0.35, neck - u * 0.1);
-  g.closePath();
-  g.fill();
-  // arms, swinging opposite to the legs
-  g.lineWidth = u * 0.55;
-  for (const side of [-1, 1]) {
-    g.beginPath();
-    g.moveTo(x + side * shoulderW * 0.42, neck + u * 0.5);
-    g.quadraticCurveTo(x + side * shoulderW * 0.55, neck + u * 2, x + side * shoulderW * 0.45 - side * stride * 0.5, hip + u * 0.3);
-    g.stroke();
-  }
-  // legs
-  g.lineWidth = u * 0.7;
-  for (const side of [-1, 1]) {
-    g.beginPath();
-    g.moveTo(x + side * hipW * 0.25, hip);
-    g.quadraticCurveTo(x + side * hipW * 0.25 + side * stride * 0.3, hip + (feet - hip) * 0.5, x + side * hipW * 0.2 + side * stride, feet);
-    g.stroke();
-  }
-  if (r() < 0.35) { // a shoulder bag
-    g.beginPath();
-    g.ellipse(x + shoulderW * 0.6, hip - u * 0.2, u * 0.45, u * 0.6, 0, 0, Math.PI * 2);
-    g.fill();
-  }
+/** Concrete paving: speckled grey with joints every slab. */
+function concreteTexture(width = 160, length = 2.5) {
+  return cached(`concrete${width}x${length}`, () => {
+    const t = canvasTex(256, (g, S) => {
+      g.fillStyle = '#b9b6ae';
+      g.fillRect(0, 0, S, S);
+      const r = rng(9);
+      for (let i = 0; i < 4000; i++) {
+        const v = 150 + r() * 70;
+        g.fillStyle = `rgba(${v},${v},${v - 6},.5)`;
+        g.fillRect(r() * S, r() * S, 1.5, 1.5);
+      }
+      g.strokeStyle = 'rgba(70,70,66,.7)';
+      g.lineWidth = 3;
+      g.strokeRect(0, 0, S, S);
+    });
+    // one texture tile per ~1.25 m slab
+    t.repeat.set(Math.max(1, width / 1.25), Math.max(1, length / 1.25));
+    return t;
+  });
 }
 
 /** Upholstery weave, used as both colour and bump map. */

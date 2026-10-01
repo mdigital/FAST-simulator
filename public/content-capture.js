@@ -5,7 +5,9 @@
 //    canvas itself becomes the texture source, live every frame.
 //  - "dom": a regular web page. It is rasterised with html2canvas whenever it
 //    changes (rate-limited), and any <video>/<canvas> elements are redrawn
-//    live on top every frame.
+//    live every frame, in the right stacking order: media that other content
+//    covers (e.g. an animated background canvas) goes under the snapshot,
+//    media that is on top goes over it.
 //  - "auto" (default): picks one of the above, re-checked every couple of seconds.
 
 import { FAST } from './config.js';
@@ -30,6 +32,9 @@ export class ContentCapture {
     this.observer = null;
     this.observedDoc = null;
     this.html2canvas = null;
+    this.media = { under: [], over: [] };
+    this.lastClassify = 0;
+    this.pageBg = '#ffffff';
     drawMessage(this.cctx, 'Loading…');
   }
 
@@ -65,6 +70,13 @@ export class ContentCapture {
     }
     this.watch(c);
 
+    if (now - this.lastClassify > 500) {
+      this.lastClassify = now;
+      const prevUnder = this.media.under.length;
+      this.media = classifyMedia(c);
+      if (this.media.under.length !== prevUnder) this.dirty = true;
+    }
+
     if (now - this.lastModeCheck > 2000 || !this.mode || this.mode === 'blocked') {
       this.lastModeCheck = now;
       const prev = this.mode;
@@ -81,9 +93,12 @@ export class ContentCapture {
     if (c.doc.getAnimations && c.doc.getAnimations().some((a) => a.playState === 'running')) this.dirty = true;
     if (!this.busy && this.dirty && now - this.lastSnap > this.minInterval) this.snap(c);
 
-    this.cctx.clearRect(0, 0, W, H);
-    if (this.snapshot) this.cctx.drawImage(this.snapshot, 0, 0, W, H);
-    this.drawLiveMedia(c);
+    const g = this.cctx;
+    g.fillStyle = this.pageBg;
+    g.fillRect(0, 0, W, H);
+    this.drawLive(c, this.media.under);
+    if (this.snapshot) g.drawImage(this.snapshot, 0, 0, W, H);
+    this.drawLive(c, this.media.over);
     return { image: this.composite, changed: true };
   }
 
@@ -106,13 +121,25 @@ export class ContentCapture {
     this.lastSnap = performance.now();
     try {
       this.html2canvas ??= await loadHtml2canvas();
-      const bg = c.win.getComputedStyle(c.doc.body || c.doc.documentElement).backgroundColor;
-      this.snapshot = await this.html2canvas(c.doc.documentElement, {
+      const cs = (el) => el && c.win.getComputedStyle(el).backgroundColor;
+      const bg = [cs(c.doc.body), cs(c.doc.documentElement)].find((b) => !isTransparent(b)) || '#ffffff';
+      // With media underneath, the page background is painted by us first,
+      // so the snapshot must be see-through where the media shows.
+      const underlay = this.media.under.length > 0;
+      this.pageBg = bg;
+      const snapshot = await this.html2canvas(c.doc.documentElement, {
         width: W, height: H, windowWidth: W, windowHeight: H,
         x: c.win.scrollX, y: c.win.scrollY, scrollX: 0, scrollY: 0,
         scale: 1, useCORS: true, logging: false,
-        backgroundColor: isTransparent(bg) ? '#ffffff' : bg
+        backgroundColor: underlay ? null : bg,
+        // Video and canvas are drawn live by drawLive().
+        ignoreElements: (el) => el.tagName === 'VIDEO' || el.tagName === 'CANVAS',
+        onclone: (doc) => {
+          if (!underlay) return;
+          for (const el of [doc.documentElement, doc.body]) if (el) el.style.setProperty('background', 'transparent', 'important');
+        }
       });
+      this.snapshot = snapshot;
     } catch (err) {
       console.warn('[fast-sim] DOM capture failed', err);
     } finally {
@@ -120,10 +147,11 @@ export class ContentCapture {
     }
   }
 
-  drawLiveMedia(c) {
-    for (const el of c.doc.querySelectorAll('video, canvas')) {
+  drawLive(c, list) {
+    for (const el of list) {
+      if (!el.isConnected) continue;
       const r = el.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2 || r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) continue;
+      if (r.width < 2 || r.height < 2) continue;
       if (el.tagName === 'VIDEO' && el.readyState < 2) continue;
       try {
         this.cctx.drawImage(el, r.left, r.top, r.width, r.height);
@@ -138,18 +166,55 @@ function detectMode(c) {
   return mainCanvas(c) ? 'canvas' : 'dom';
 }
 
-// A canvas covering (nearly) the whole 1920x1080 viewport with nothing else visible.
+// A canvas covering the whole 1920x1080 viewport with nothing at all on top of it.
 function mainCanvas(c) {
-  const canvases = c.doc.getElementsByTagName('canvas');
-  for (const el of canvases) {
+  for (const el of c.doc.getElementsByTagName('canvas')) {
     const r = el.getBoundingClientRect();
-    if (r.left <= 2 && r.top <= 2 && r.width >= W - 4 && r.height >= H - 4) {
-      const top = c.doc.elementFromPoint(W / 2, H / 2);
-      const corner = c.doc.elementFromPoint(W - 10, 10);
-      if ((top === el || top === null) && (corner === el || corner === null)) return el;
-    }
+    if (r.left > 2 || r.top > 2 || r.width < W - 4 || r.height < H - 4) continue;
+    const pts = [];
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) pts.push([(i + 0.5) * (W / 6), (j + 0.5) * (H / 4)]);
+    if (withHitTesting(c, () => pts.every(([x, y]) => c.doc.elementFromPoint(x, y) === el))) return el;
   }
   return null;
+}
+
+/** Which visible videos/canvases are covered by other content, and which are on top. */
+function classifyMedia(c) {
+  const under = [], over = [];
+  const els = [...c.doc.querySelectorAll('video, canvas')].filter((el) => {
+    const r = el.getBoundingClientRect();
+    const cs = c.win.getComputedStyle(el);
+    return r.width >= 2 && r.height >= 2 && r.right > 0 && r.bottom > 0 && r.left < W && r.top < H &&
+      cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0;
+  });
+  if (!els.length) return { under, over };
+  withHitTesting(c, () => {
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      const x0 = Math.max(0, r.left), x1 = Math.min(W, r.right), y0 = Math.max(0, r.top), y1 = Math.min(H, r.bottom);
+      let hits = 0, n = 0;
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) {
+        const t = c.doc.elementFromPoint(x0 + ((i + 0.5) / 5) * (x1 - x0), y0 + ((j + 0.5) / 5) * (y1 - y0));
+        n++;
+        if (t === el || el.contains(t)) hits++;
+      }
+      (hits === n ? over : under).push(el);
+    }
+  });
+  return { under, over };
+}
+
+// Hit-test everything, including pointer-events:none overlays, so stacking
+// order (not clickability) decides what is on top.
+function withHitTesting(c, fn) {
+  const style = c.doc.createElement('style');
+  style.textContent = '* { pointer-events: auto !important; }';
+  (c.doc.head || c.doc.documentElement).appendChild(style);
+  try {
+    return fn();
+  } finally {
+    style.remove();
+  }
 }
 
 function isTransparent(color) {

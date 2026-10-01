@@ -47,7 +47,7 @@ export class TableScene {
     this.scene = new THREE.Scene();
     this.background = new THREE.Color(0x141619);
     this.scene.background = this.background;
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.01, 50);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.01, 250);
 
     this.buildEnvironment();
     this.buildTable();
@@ -88,7 +88,8 @@ export class TableScene {
     s.add(key);
 
     // The gallery: carpet, walls, windows. Hidden in passthrough.
-    this.env = buildRoom(0, -1);
+    // Centred behind the viewer so the glass wall is ~6 m beyond the table.
+    this.env = buildRoom(0, 4);
     s.add(this.env);
   }
 

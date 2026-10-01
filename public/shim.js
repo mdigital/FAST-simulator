@@ -13,6 +13,9 @@
 //    simulator injects (ids >= 1000), which the browser would otherwise reject.
 //  - Forces preserveDrawingBuffer on WebGL canvases so the simulator can copy
 //    them onto the 3D table.
+//  - On a touch-table layout, makes the page see a touchscreen device
+//    (maxTouchPoints, ontouchstart, pointer: coarse), because many apps and
+//    libraries pick mouse-only handling when they detect a desktop.
 (function () {
   if (window.__fastsim) return;
 
@@ -81,6 +84,49 @@
     }
     return origGetContext.call(this, type, attrs);
   };
+
+  var config = null;
+  try { config = window.parent !== window && window.parent.__fastsimConfig; } catch (e) { /* cross-origin parent */ }
+  if (config && config.touch) emulateTouchDevice();
+
+  function emulateTouchDevice() {
+    try {
+      Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: function () { return 10; }, configurable: true });
+    } catch (e) { /* ignore */ }
+    // ontouchstart etc. exist on touch builds; make them real handler properties.
+    ['ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel'].forEach(function (prop) {
+      var type = prop.slice(2);
+      [window, Document.prototype, HTMLElement.prototype, SVGElement.prototype].forEach(function (obj) {
+        if (prop in obj) return;
+        var key = '__fastsim_' + prop;
+        Object.defineProperty(obj, prop, {
+          configurable: true,
+          get: function () { return this[key] || null; },
+          set: function (fn) {
+            if (this[key]) this.removeEventListener(type, this[key]);
+            this[key] = typeof fn === 'function' ? fn : null;
+            if (this[key]) this.addEventListener(type, this[key]);
+          }
+        });
+      });
+    });
+    // A touch table has a coarse pointer and no hover.
+    var answers = {
+      '(pointer: coarse)': true, '(pointer: fine)': false, '(pointer: none)': false,
+      '(any-pointer: coarse)': true, '(any-pointer: fine)': false,
+      '(hover: none)': true, '(hover: hover)': false, '(any-hover: none)': true, '(any-hover: hover)': false
+    };
+    var nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = function (query) {
+      var q = String(query).trim().toLowerCase().replace(/\s+/g, ' ').replace(/\( */g, '(').replace(/ *\)/g, ')').replace(/: */g, ': ');
+      if (!(q in answers)) return nativeMatchMedia(query);
+      return {
+        matches: answers[q], media: query, onchange: null,
+        addListener: function () {}, removeListener: function () {},
+        addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; }
+      };
+    };
+  }
 
   window.__fastsim = {
     version: 1,

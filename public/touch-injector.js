@@ -70,6 +70,7 @@ export class TouchInjector {
     const dx = x - p.x, dy = y - p.y;
     if (dx === 0 && dy === 0) return;
     p.x = x; p.y = y;
+    p.dx = dx; p.dy = dy; // movementX/Y for this move
     if (!p.moved && Math.hypot(x - p.sx, y - p.sy) > TAP_SLOP) p.moved = true;
 
     if (p.scrolling) {
@@ -79,7 +80,7 @@ export class TouchInjector {
       this.emit('move', p);
       return;
     }
-    this.firePointer(c, 'pointermove', p, this.pointerTarget(c, p), { button: -1 });
+    this.firePointer(c, 'pointermove', p, this.pointerTarget(c, p), { button: -1, movementX: dx, movementY: dy });
     if (this.kind === 'mouse') {
       this.fireMouse(c, 'mousemove', p, c.doc.elementFromPoint(x, y) || p.target, 1);
       this.emit('move', p);
@@ -168,7 +169,8 @@ export class TouchInjector {
     const ev = new c.win.MouseEvent(type, {
       bubbles: true, cancelable: true, composed: true, view: c.win,
       clientX: p.x, clientY: p.y, screenX: p.x, screenY: p.y,
-      button: 0, buttons, detail: type === 'click' || type === 'mousedown' || type === 'mouseup' ? 1 : 0
+      button: 0, buttons, detail: type === 'click' || type === 'mousedown' || type === 'mouseup' ? 1 : 0,
+      movementX: type === 'mousemove' ? p.dx || 0 : 0, movementY: type === 'mousemove' ? p.dy || 0 : 0
     });
     target.dispatchEvent(ev);
   }

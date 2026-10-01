@@ -87,6 +87,8 @@ async function open(work) {
   model.addEventListener('input', (e) => logInput(e.detail));
 
   $('#about').textContent = [work.title, work.description].filter(Boolean).join(' — ');
+  // Read by shim.js inside the page as it loads: emulate a touchscreen device.
+  window.__fastsimConfig = { touch: layout.pointer === 'touch' };
   frame.src = work.src;
   layoutFlat();
   updateHint();
@@ -221,6 +223,30 @@ function endPointer(e) {
 overlay.addEventListener('pointerup', endPointer);
 overlay.addEventListener('pointercancel', endPointer);
 overlay.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// The overlay is on top of the page, so pass the mouse wheel through: scroll
+// whatever is under the pointer (handy on desktop, though a table has no wheel).
+overlay.addEventListener('wheel', (e) => {
+  const doc = sameOriginDoc();
+  if (!doc) return;
+  e.preventDefault();
+  const p = toContent(e);
+  const target = doc.elementFromPoint(p.x, p.y) || doc.documentElement;
+  const win = frame.contentWindow;
+  const ev = new win.WheelEvent('wheel', {
+    bubbles: true, cancelable: true, composed: true, view: win,
+    clientX: p.x, clientY: p.y, deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode
+  });
+  if (!target.dispatchEvent(ev)) return;
+  for (let n = target; n; n = n.parentElement) {
+    const cs = win.getComputedStyle(n);
+    if ((/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) || (/(auto|scroll)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth)) {
+      n.scrollBy(e.deltaX, e.deltaY);
+      return;
+    }
+  }
+  doc.scrollingElement?.scrollBy(e.deltaX, e.deltaY);
+}, { passive: false });
 
 function twoFinger(p) {
   const s = gesture.start;
