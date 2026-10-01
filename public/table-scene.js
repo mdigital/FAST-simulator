@@ -11,6 +11,7 @@ import { FAST, OPTIONS } from './config.js';
 import { buildTools } from './tools3d.js';
 import { isPlain, PLAIN_BORDER } from './layouts.js';
 import { buildRoom, buildLegs, buildPlinth, buildStools } from './room.js';
+import { loadPosters, hangPosters } from './posters.js';
 
 const SLAB = 0.04; // tabletop thickness
 const RELEASE_GAP = 0.012; // hysteresis above the poke threshold before lifting
@@ -90,6 +91,9 @@ export class TableScene {
     // Centred behind the viewer so the glass wall is ~6 m beyond the table.
     this.env = buildRoom(0, 4);
     s.add(this.env);
+    // Te Papa posters on the walls (cached in public/posters/).
+    this.posterTargets = [];
+    loadPosters().then((list) => { this.posterTargets = hangPosters(this.env, list); });
   }
 
   buildTable() {
@@ -117,7 +121,7 @@ export class TableScene {
     this.table.add(this.screen);
 
     // Spotlight over the table, so it reads clearly in the dim room.
-    this.spot = new THREE.SpotLight(0xfff1dc, 80, 0, 0.6, 0.5, 1.2);
+    this.spot = new THREE.SpotLight(0xfff1dc, 52, 0, 0.6, 0.5, 1.2);
     this.spot.position.set(0, 3.2, 0.25);
     this.spot.target.position.set(0, 0, 0);
     const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.2, 20), new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.5, metalness: 0.5 }));
@@ -266,12 +270,14 @@ export class TableScene {
 
   /** First thing a ray hits: a tool, a VR panel button, or the image. */
   pick(ray) {
-    const rc = new THREE.Raycaster(ray.origin, ray.direction, 0, 20);
+    const rc = new THREE.Raycaster(ray.origin, ray.direction, 0, 30);
     const list = [...this.targets, this.screen];
     if (this.panel.visible) list.push(...this.buttons);
+    if (this.env.visible) list.push(...this.posterTargets);
     const hit = rc.intersectObjects(list, false)[0];
     if (!hit) return null;
     if (this.buttons.includes(hit.object)) return { kind: 'panel', hit };
+    if (hit.object.userData.poster) return { kind: 'poster', hit, poster: hit.object.userData.poster };
     if (hit.object === this.screen) return { kind: 'screen', hit };
     return { kind: 'tool', hit, tool: hit.object.userData.tool };
   }
@@ -279,6 +285,7 @@ export class TableScene {
   startGrab(key, ptr, picked) {
     if (!picked) return false;
     if (picked.kind === 'panel') { picked.hit.object.userData.action(); return true; }
+    if (picked.kind === 'poster') { this.openLink(picked.poster.url); return true; }
     if (picked.kind === 'tool') {
       picked.tool.grab(ptr, picked.hit);
       this.grabs.set(key, { tool: picked.tool, ptr });
@@ -309,6 +316,15 @@ export class TableScene {
     this.grabs.delete(key);
     if (g.tool) g.tool.release(g.ptr);
     else { this.injector.up(key); this.capture.markDirty(); }
+  }
+
+  /** Open a poster's Collections Online page (leaving VR first, so it's visible). */
+  openLink(url) {
+    const session = this.renderer.xr.getSession();
+    const win = window.open(url, '_blank');
+    if (win) win.opener = null;
+    if (session) session.end();
+    else if (!win) location.href = url; // popup blocked: navigate instead
   }
 
   releaseAll() {

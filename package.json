@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "build": "node scripts/build-static.js"
+    "build": "node scripts/build-static.js",
+    "posters": "node scripts/fetch-posters.js"
   },
   "engines": {
     "node": ">=18"

@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
-const ROOM = { w: 20, d: 20, h: 4.2 };
+export const ROOM = { w: 20, d: 20, h: 4.2 };
 
 // ------------------------------------------------------------------ room
 

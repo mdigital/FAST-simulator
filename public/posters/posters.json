@@ -1,0 +1,234 @@
+{
+  "source": "Te Papa Collections API",
+  "fetched": "2026-10-01T23:42:21.022Z",
+  "posters": [
+    {
+      "id": 605717,
+      "title": "Chateau Tongariro poster",
+      "maker": "Edgar Lovell-Smith",
+      "date": "circa 1932",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, ink",
+      "creditLine": "Purchased 2001",
+      "identifier": "GH014052",
+      "caption": "Chateau Tongariro poster, circa 1932, Wellington, by New Zealand Railways Publicity Branch, Coulls, Somerville, Wilkie, Ltd., Edgar Lovell-Smith. Purchased 2001. Te Papa (GH014052)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "605717.jpg",
+      "aspect": 0.6435,
+      "sizeMm": {
+        "width": 640,
+        "height": 1015
+      },
+      "url": "https://collections.tepapa.govt.nz/object/605717"
+    },
+    {
+      "id": 1351070,
+      "title": "Poster, 'Rotorua'",
+      "maker": "New Zealand Railways Publicity Branch",
+      "date": "circa 1932",
+      "place": "New Zealand",
+      "medium": "paper, ink",
+      "creditLine": "Purchased 2013",
+      "identifier": "GH017633",
+      "caption": "Poster, 'Rotorua', circa 1932, New Zealand, by New Zealand Railways Publicity Branch. Purchased 2013. Te Papa (GH017633)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "1351070.jpg",
+      "aspect": 0.6256,
+      "sizeMm": {
+        "width": 724,
+        "height": 1100
+      },
+      "url": "https://collections.tepapa.govt.nz/object/1351070"
+    },
+    {
+      "id": 212473,
+      "title": "New Zealand Christchurch poster",
+      "maker": "New Zealand Railways Publicity Branch",
+      "date": "1930s",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, ink",
+      "creditLine": "Gift of Stephanie Gibson, 2007",
+      "identifier": "GH015812",
+      "caption": "New Zealand Christchurch poster, 1930s, Wellington, by New Zealand Railways Publicity Branch. Gift of Stephanie Gibson, 2007. Te Papa (GH015812)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "212473.jpg",
+      "aspect": 0.579,
+      "sizeMm": {
+        "width": 582,
+        "height": 1006
+      },
+      "url": "https://collections.tepapa.govt.nz/object/212473"
+    },
+    {
+      "id": 719110,
+      "title": "Poster, '1940 New Zealand Centennial Exhibition'",
+      "maker": "Leonard Mitchell",
+      "date": "1939",
+      "place": null,
+      "medium": "paper, printing ink",
+      "creditLine": null,
+      "identifier": "GH015345",
+      "caption": "Poster, '1940 New Zealand Centennial Exhibition', 1939, by Leonard Mitchell. Te Papa (GH015345)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "719110.jpg",
+      "aspect": 0.6153,
+      "sizeMm": {
+        "width": 630,
+        "height": 1015
+      },
+      "url": "https://collections.tepapa.govt.nz/object/719110"
+    },
+    {
+      "id": 1172855,
+      "title": "Poster, 'A Map of New Zealand'",
+      "maker": "MacDonald Gill",
+      "date": "1931",
+      "place": "United Kingdom",
+      "medium": "paper, ink",
+      "creditLine": "Acquisition details/history unknown. Found in collection, 2012",
+      "identifier": "GH021717",
+      "caption": "Poster, 'A Map of New Zealand', 1931, United Kingdom, by MacDonald Gill, Dobson, Molle and Co. Ltd., His Majesty's Stationery Office, Empire Marketing Board. Acquisition details/history unknown. Found in collection, 2012. Te Papa (GH021717)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "1172855.jpg",
+      "aspect": 1.4438,
+      "sizeMm": {
+        "width": 1528,
+        "height": 1020
+      },
+      "url": "https://collections.tepapa.govt.nz/object/1172855"
+    },
+    {
+      "id": 1028331,
+      "title": "Poster, 'Haeremai Haeremai'",
+      "maker": "Andrew Hornblow",
+      "date": "1920",
+      "place": "Wellington (New Zealand)",
+      "medium": "printing paper, ink",
+      "creditLine": null,
+      "identifier": "GH016572",
+      "caption": "Poster, 'Haeremai Haeremai', 1920, Wellington, by Andrew Hornblow. Te Papa (GH016572)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "1028331.jpg",
+      "aspect": 0.7788,
+      "sizeMm": {
+        "width": 443,
+        "height": 568
+      },
+      "url": "https://collections.tepapa.govt.nz/object/1028331"
+    },
+    {
+      "id": 707861,
+      "title": "Poster, 'Taringa Whakarongo!'",
+      "maker": "New Zealand National Savings Committee",
+      "date": "1941",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, printing ink",
+      "creditLine": "Purchased 2006",
+      "identifier": "GH015341",
+      "caption": "Poster, 'Taringa Whakarongo!', 1941, Wellington, by New Zealand National Savings Committee. Purchased 2006. Te Papa (GH015341)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "707861.jpg",
+      "aspect": 0.6533,
+      "sizeMm": {
+        "width": 483,
+        "height": 738
+      },
+      "url": "https://collections.tepapa.govt.nz/object/707861"
+    },
+    {
+      "id": 563979,
+      "title": "Poster, 'Help promote Health!'",
+      "maker": "William Skinner",
+      "date": "1930",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, printing ink",
+      "creditLine": "Purchased 2001",
+      "identifier": "GH009878",
+      "caption": "Poster, 'Help promote Health!', 1930, Wellington, by William Skinner. Purchased 2001. Te Papa (GH009878)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "563979.jpg",
+      "aspect": 0.771,
+      "sizeMm": {
+        "width": 445,
+        "height": 570
+      },
+      "url": "https://collections.tepapa.govt.nz/object/563979"
+    },
+    {
+      "id": 564021,
+      "title": "Poster, 'Health for the Children!'",
+      "maker": "Leonard Mitchell",
+      "date": "1931",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, ink",
+      "creditLine": "Purchased 2001",
+      "identifier": "GH009879",
+      "caption": "Poster, 'Health for the Children!', 1931, Wellington, by William Skinner, Leonard Mitchell. Purchased 2001. Te Papa (GH009879)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "564021.jpg",
+      "aspect": 0.7889,
+      "sizeMm": {
+        "width": 445,
+        "height": 570
+      },
+      "url": "https://collections.tepapa.govt.nz/object/564021"
+    },
+    {
+      "id": 592836,
+      "title": "Poster, 'Protect New Zealand'",
+      "maker": "New Zealand National Savings Committee",
+      "date": "June 1942",
+      "place": "Wellington (New Zealand)",
+      "medium": "paper, printing ink",
+      "creditLine": "Loan from Mr C.H. Andrews, 1967",
+      "identifier": "GH014046",
+      "caption": "Poster, 'Protect New Zealand', June 1942, Wellington, by New Zealand National Savings Committee. Loan from Mr C.H. Andrews, 1967. Te Papa (GH014046)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "592836.jpg",
+      "aspect": 0.7511,
+      "sizeMm": {
+        "width": 362,
+        "height": 487
+      },
+      "url": "https://collections.tepapa.govt.nz/object/592836"
+    },
+    {
+      "id": 592912,
+      "title": "Poster, 'ANZAC'",
+      "maker": "Palmer and Mahood Ltd.",
+      "date": "1916",
+      "place": "New Zealand",
+      "medium": "paper, printing ink",
+      "creditLine": "Acquisition history unknown",
+      "identifier": "GH014050",
+      "caption": "Poster, 'ANZAC', 1916, New Zealand, by Palmer and Mahood Ltd. Acquisition history unknown. Te Papa (GH014050)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "592912.jpg",
+      "aspect": 0.774,
+      "sizeMm": {
+        "width": 460,
+        "height": 585
+      },
+      "url": "https://collections.tepapa.govt.nz/object/592912"
+    },
+    {
+      "id": 894130,
+      "title": "Poster, 'N.Z. Patriotic Society'",
+      "maker": "New Zealand Patriotic Society (Wellington Branch)",
+      "date": "1915-1916",
+      "place": "New Zealand",
+      "medium": "ink, paper",
+      "creditLine": "Acqusition history unknown",
+      "identifier": "GH016012",
+      "caption": "Poster, 'N.Z. Patriotic Society', 1915-1916, New Zealand, by New Zealand Patriotic Society (Wellington Branch), Yeoman & Barker, David McLaren. Acqusition history unknown. Te Papa (GH016012)",
+      "rights": "No Known Copyright Restrictions",
+      "image": "894130.jpg",
+      "aspect": 0.5053,
+      "sizeMm": {
+        "width": 384,
+        "height": 810
+      },
+      "url": "https://collections.tepapa.govt.nz/object/894130"
+    }
+  ]
+}

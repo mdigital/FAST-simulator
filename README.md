@@ -128,6 +128,22 @@ Choose the table style with the picker in the toolbar (it appears in 3D view) or
 Passthrough hides the room and the stools so you can line the table up with your real surroundings.
 Everything is drawn in code (`public/room.js`), so there are no images or models to download.
 
+## Posters on the walls
+
+The gallery walls hold New Zealand posters from [Te Papa's collection](https://collections.tepapa.govt.nz/): 1930s Railways tourism posters, the 1940 Centennial Exhibition, MacDonald Gill's map of New Zealand, health and home-front posters, and more.
+Each hangs at its real size under a picture light. Its rights statement sits on a plaque underneath, with a museum caption label beside it.
+Click a poster or its label (in VR: point and pinch, or pull the trigger) to open its Collections Online page. In VR this leaves the headset view first.
+
+The posters are **cached in the repo** (`public/posters/`: images plus `posters.json`), so the simulator never calls the API and needs no key.
+To change them:
+
+1. Edit the ids in `posters.config.json`. You can use `{ "id": 605717, "title": "…" }` to override any field. You can also edit `public/posters/posters.json` directly.
+2. Find candidates: `TEPAPA_API_KEY=<your key> npm run posters -- --search "railways poster"`
+3. Rebuild the cache: `TEPAPA_API_KEY=<your key> npm run posters`
+
+The script only caches images whose rights allow download, and it removes images that are no longer listed.
+`TEPAPA_API_BASE` overrides the API (default: the v4 staging API). Keep your key out of the repo: pass it in the environment.
+
 ## Desktop controls
 
 - **Buttons**: click them, or press their keys (quiz: `1`–`4`, `Q`–`R`, `A`–`F`, `Z`–`V`)
@@ -218,6 +234,8 @@ public/                   the simulator (served at /__fastsim/, built to dist/si
   flat-view.js            top-down view with HTML tools
   table-scene.js          three.js table, WebXR hands/controllers, VR panel
   room.js                 gallery room, carpet, windows, stools and plinth
+  posters.js              Te Papa posters, rights plaques and caption labels on the walls
+  posters/                cached poster images + posters.json (from scripts/fetch-posters.js)
   tools3d.js              3D tools and their hand/mouse interaction
   touch-injector.js       touch/mouse events for the touch and open layouts
   content-capture.js      copies the page into a texture for the 3D table
@@ -226,4 +244,6 @@ public/                   the simulator (served at /__fastsim/, built to dist/si
   works.json              the works list
   demo/                   demo content for each template, plus fast-client.js
 scripts/build-static.js   static build into dist/
+scripts/fetch-posters.js  refreshes the poster cache from the Te Papa API
+posters.config.json       which posters to hang
 ```

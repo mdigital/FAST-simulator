@@ -1,0 +1,17 @@
+{
+  "_comment": "Posters on the gallery walls, by Te Papa object id. Edit this list, then run: TEPAPA_API_KEY=... npm run posters. Use an object instead of a number to override fields, e.g. { \"id\": 605717, \"title\": \"Chateau Tongariro\" }. Find ids with: npm run posters -- --search \"railways poster\"",
+  "posters": [
+    605717,
+    1351070,
+    212473,
+    719110,
+    1172855,
+    1028331,
+    707861,
+    563979,
+    564021,
+    592836,
+    592912,
+    894130
+  ]
+}
