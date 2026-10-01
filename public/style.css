@@ -118,7 +118,9 @@ main { position: relative; min-height: 0; z-index: 1; }
   touch-action: none;
 }
 /* The FAST image isn't touch-sensitive; "native" layouts pass the mouse through. */
-body[data-pointer="native"] #overlay { pointer-events: none; }
+body[data-pointer="native"] #overlay, body.cross-origin #overlay { pointer-events: none; }
+/* Plain touch table: a black bezel instead of the FAST tabletop. */
+#table-space.plain { background: #0b0b0c; border-radius: 18px; box-shadow: 0 0 0 2px #2a2c30, 0 30px 80px rgba(0, 0, 0, 0.6); }
 
 .dot {
   position: absolute;

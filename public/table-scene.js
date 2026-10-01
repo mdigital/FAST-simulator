@@ -8,6 +8,7 @@ import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { FAST, OPTIONS } from './config.js';
 import { buildTools } from './tools3d.js';
+import { isPlain, PLAIN_BORDER } from './layouts.js';
 
 const SLAB = 0.04; // tabletop thickness
 const RELEASE_GAP = 0.012; // hysteresis above the poke threshold before lifting
@@ -158,6 +159,22 @@ export class TableScene {
     for (const tool of this.tools) { this.toolsGroup.add(tool.group); tool.sync(); }
     this.onModelChange = (e) => this.tools.find((t) => t.id === e.detail.id)?.sync();
     model?.addEventListener('change', this.onModelChange);
+    this.setPlain(!!model && isPlain(model.layout));
+  }
+
+  /** No tools: show a plain touch table (black bezel, thin rim, no projector). */
+  setPlain(plain) {
+    this.plain = plain;
+    const W = FAST.projW, D = FAST.projD, B = plain ? PLAIN_BORDER : FAST.border;
+    const TW = W + 2 * B, TD = D + 2 * B;
+    this.top.scale.set(TW / (W + 2 * FAST.border), 1, TD / (D + 2 * FAST.border));
+    this.top.material.color.set(plain ? 0x111214 : 0xcfd0cc);
+    this.top.material.roughness = plain ? 0.35 : 1;
+    this.legs.forEach((leg, i) => leg.position.set((i < 2 ? -1 : 1) * (TW / 2 - 0.05), leg.position.y, (i % 2 ? 1 : -1) * (TD / 2 - 0.05)));
+    this.projector.visible = !plain && this.xrMode !== 'immersive-ar';
+    this.screenMat.color.set(plain ? 0xffffff : 0xf0f0f0);
+    this.panel.position.x = TW / 2 + 0.14;
+    this.panel.position.z = TD / 2 - 0.05;
   }
 
   buildPanel() {
@@ -546,7 +563,7 @@ export class TableScene {
   onSessionStart() {
     const ar = this.xrMode === 'immersive-ar';
     this.env.visible = !ar;
-    this.projector.visible = !ar;
+    this.projector.visible = !ar && !this.plain;
     this.scene.background = ar ? null : this.background;
     this.panel.visible = true;
     this.controls.enabled = false;
@@ -554,7 +571,8 @@ export class TableScene {
 
   onSessionEnd() {
     this.env.visible = true;
-    this.projector.visible = true;
+    this.xrMode = null;
+    this.projector.visible = !this.plain;
     this.scene.background = this.background;
     this.panel.visible = false;
     this.controls.enabled = true;

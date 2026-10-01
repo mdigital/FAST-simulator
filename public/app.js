@@ -3,7 +3,7 @@ import { TouchInjector } from './touch-injector.js';
 import { ContentCapture } from './content-capture.js';
 import { loadLayout, PRESETS } from './layouts.js';
 import { FastModel } from './model.js';
-import { FlatView, SPACE_W, SPACE_H } from './flat-view.js';
+import { FlatView } from './flat-view.js';
 
 const $ = (sel) => document.querySelector(sel);
 const frame = $('#content');
@@ -56,7 +56,12 @@ async function loadWorks() {
 workSelect.addEventListener('change', () => {
   const w = works.find((x) => x.id === workSelect.value);
   if (w) open(w);
-  else document.body.classList.add('custom');
+  else {
+    // Custom URL: start from a plain touch table, no tools.
+    document.body.classList.add('custom');
+    layoutSelect.value = 'touch';
+    srcInput.select();
+  }
 });
 
 /** Show a piece of work: content URL + the tools it uses. */
@@ -66,9 +71,9 @@ async function open(work) {
   workSelect.value = work.id || '';
   srcInput.value = work.src;
   layoutSelect.value = typeof work.layout === 'string' && PRESETS[work.layout] ? work.layout : layoutSelect.value;
-  layout = await loadLayout(work.layout || 'sandbox', worksBase).catch((err) => {
+  layout = await loadLayout(work.layout || 'touch', worksBase).catch((err) => {
     alert(err.message);
-    return loadLayout('sandbox');
+    return loadLayout('touch');
   });
 
   model?.dispose();
@@ -124,8 +129,15 @@ function logInput(m) {
 
 function updateStatus() {
   const same = injector.available();
+  // A page on another site can't receive simulated touches, so let the real
+  // mouse / touchscreen reach it directly instead.
+  document.body.classList.toggle('cross-origin', !same);
   const parts = [];
-  if (!same) parts.push('<span class="warn">cross-origin: tools still work, no 3D image</span>');
+  if (!same) {
+    parts.push(layout?.tools.length
+      ? '<span class="warn">other site: tools still work, but no 3D image</span>'
+      : '<span class="warn">other site: your mouse goes straight to the page; for touch emulation and 3D, serve it through the dev server (see README)</span>');
+  }
   if (view === '3d' && same && capture.mode) parts.push(`capture: ${capture.mode}`);
   if (lastInput) parts.push(`<code>${escapeHtml(lastInput)}</code>`);
   status.innerHTML = parts.join(' · ');
@@ -139,9 +151,10 @@ function layoutFlat() {
   const top = OPTIONS.embed ? 56 : pad; // room for the floating toolbar
   const w = flatStage.clientWidth - pad * 2;
   const h = flatStage.clientHeight - pad - top;
-  scale = Math.max(0.05, Math.min(w / SPACE_W, h / SPACE_H));
-  const x = (flatStage.clientWidth - SPACE_W * scale) / 2;
-  const y = top + (h - SPACE_H * scale) / 2;
+  const sw = flatView?.spaceW ?? FAST.width, sh = flatView?.spaceH ?? FAST.height;
+  scale = Math.max(0.05, Math.min(w / sw, h / sh));
+  const x = (flatStage.clientWidth - sw * scale) / 2;
+  const y = top + (h - sh * scale) / 2;
   space.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
 }
 new ResizeObserver(layoutFlat).observe(flatStage);
@@ -316,13 +329,16 @@ document.addEventListener('fullscreenchange', layoutFlat);
 
 function updateHint() {
   const p = layout?.pointer;
+  const hasTools = !!layout?.tools.length;
   const tools = 'Buttons: click or keys · dial: drag around, scroll or ←/→ · objects: drag onto the table, scroll to rotate, double-click to put back';
   const surface = p === 'touch'
-    ? 'Image: drag = finger, <kbd>Shift</kbd>+drag = pinch, <kbd>Ctrl</kbd>+drag = pan'
-    : p === 'native' ? 'Image: mouse goes straight to the page' : 'The projected image itself is not touch-sensitive';
+    ? 'Drag = one finger · <kbd>Shift</kbd>+drag = pinch/rotate · <kbd>Ctrl</kbd>+drag = two-finger pan · a touchscreen passes real multi-touch through'
+    : p === 'native' ? 'The mouse goes straight to the page' : 'The projected image itself is not touch-sensitive';
   $('#hint').innerHTML = view === 'flat'
-    ? `${tools} · ${surface}`
-    : 'Drag tools to use them · drag elsewhere to orbit, right-drag to pan, wheel to zoom · VR: poke buttons, pinch to grab, turn or slide';
+    ? (hasTools ? `${tools} · ${surface}` : surface)
+    : hasTools
+      ? 'Drag tools to use them · drag elsewhere to orbit, right-drag to pan, wheel to zoom · VR: poke buttons, pinch to grab, turn or slide'
+      : 'Click/drag on the screen = finger · drag elsewhere to orbit, right-drag to pan, wheel to zoom · VR: touch the screen with your index finger, or pinch to use a ray';
 }
 
 function saveParams() {
@@ -350,7 +366,7 @@ window.fastSim = { injector, capture, get model() { return model; }, get scene()
 setInterval(updateStatus, 2000);
 await loadWorks();
 const startWork = OPTIONS.src
-  ? { src: OPTIONS.src, layout: OPTIONS.layout || 'sandbox' }
+  ? { src: OPTIONS.src, layout: OPTIONS.layout || 'touch' }
   : works.find((w) => w.id === OPTIONS.work) || works[0] || { src: defaultSrc(), layout: OPTIONS.layout || 'sandbox' };
 await open(startWork);
 setView(view);

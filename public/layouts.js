@@ -95,6 +95,12 @@ export const PRESETS = {
   open: { name: 'Mouse', pointer: 'native', tools: [] }
 };
 
+/** A layout with no tools is a plain table: thin bezel, no projector. */
+export function isPlain(layout) {
+  return !layout.tools.length;
+}
+export const PLAIN_BORDER = 0.05; // metres of bezel around a plain touch table
+
 export async function loadLayout(spec, base = location.href) {
   if (!spec) return normalize(PRESETS.sandbox);
   if (typeof spec === 'object') return normalize(spec);

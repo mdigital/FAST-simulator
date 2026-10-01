@@ -23,6 +23,22 @@ npm start -- --content ./path/to/folder       # a local folder of static files
 
 Open the URL it prints, e.g. `https://localhost:8443/__fastsim/`. The certificate is self-signed, so accept the warning once per device.
 
+## Plain touch table (no tools)
+
+To show any web page on a plain 1920×1080 touch table, with a black bezel and no tools, projector, pucks or buttons, use the `touch` layout.
+It's the default for any URL you enter yourself.
+
+- **In the toolbar:** choose **Custom URL…**, paste the address, keep **Touch table (no tools)**, then press **Load**. Switch between **Flat**, **3D** and **Enter VR** as usual.
+- **As a link:** `/__fastsim/?src=<url>&layout=touch`
+
+How interactive it is depends on where the page is hosted:
+
+| Content | Flat view | 3D / VR |
+| --- | --- | --- |
+| **Another site**, e.g. `https://waiaroha-pipes.netlify.app/` typed into the box | Your real mouse or touchscreen works on the page directly | Not possible: the browser won't let the simulator read the page |
+| **Through the dev server:** `npm start -- --target https://waiaroha-pipes.netlify.app` and open the printed `…/__fastsim/?src=/` | Mouse becomes touch, with simulated pinch (<kbd>Shift</kbd>+drag) and pan (<kbd>Ctrl</kbd>+drag) | Click on the table to touch it. In VR, touch it with your index finger. |
+| **Same website as the simulator** (e.g. upload `dist/sim/` into your Netlify site and use `src: "../"`) | As above | As above |
+
 ## Tools and layouts
 
 The tools on the table come from a **layout**. The presets follow the booklet's three templates:
@@ -33,7 +49,7 @@ The tools on the table come from a **layout**. The presets follow the booklet's 
 | `quiz` | B: Quiz Show | Four stations (two per long side), each a box of ◆ ● ■ ▲ buttons |
 | `dial` | C: Node Exploration | One dial with detents at the front edge |
 | `sandbox` | — | One of each: buttons, dial, slider, toggle, pucks, magic window, die and target |
-| `touch` | not FAST | The image becomes a multi-touch screen |
+| `touch` | not FAST | A plain multi-touch table: no tools, black bezel, no projector (the default for custom URLs) |
 | `open` | not FAST | The mouse goes straight to the page, for other interactive web work |
 
 Choose one with `?layout=quiz`, or make your own JSON file and pass `?layout=my-layout.json`:
@@ -152,7 +168,7 @@ image onto the 3D/VR table needs same-origin access. A cross-origin work shows i
 | Param | Default | Meaning |
 | --- | --- | --- |
 | `work` | first in `works.json` | Which work to show |
-| `src` / `layout` | | Show any URL with any layout instead |
+| `src` / `layout` | `layout=touch` | Show any URL with any layout instead |
 | `works` | `works.json` | Where to read the works list |
 | `embed` | | `1` for the compact embed UI |
 | `view` | `flat` | `flat` or `3d` |

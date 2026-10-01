@@ -2,12 +2,9 @@
 // physical tools drawn around and on it as interactive HTML.
 
 import { FAST } from './config.js';
-import { SHAPES } from './layouts.js';
+import { SHAPES, isPlain, PLAIN_BORDER } from './layouts.js';
 
 const M = FAST.pxPerM; // CSS px (at 1:1) per metre
-const RIM = Math.round(FAST.border * M);
-export const SPACE_W = FAST.width + 2 * RIM;
-export const SPACE_H = FAST.height + 2 * RIM;
 
 export class FlatView {
   constructor(space, layer, model) {
@@ -15,9 +12,14 @@ export class FlatView {
     this.layer = layer;
     this.model = model;
     this.els = new Map();
-    space.style.width = `${SPACE_W}px`;
-    space.style.height = `${SPACE_H}px`;
-    space.style.setProperty('--rim', `${RIM}px`);
+    this.plain = isPlain(model.layout);
+    this.rim = Math.round((this.plain ? PLAIN_BORDER : FAST.border) * M);
+    this.spaceW = FAST.width + 2 * this.rim;
+    this.spaceH = FAST.height + 2 * this.rim;
+    space.classList.toggle('plain', this.plain);
+    space.style.width = `${this.spaceW}px`;
+    space.style.height = `${this.spaceH}px`;
+    space.style.setProperty('--rim', `${this.rim}px`);
     space.style.setProperty('--m', `${M}px`);
     this.build();
     this.onChange = (e) => this.update(e.detail.id);
@@ -31,15 +33,15 @@ export class FlatView {
 
   /** Table-space px of a table-local position in metres. */
   px(x, z) {
-    return { x: RIM + FAST.width / 2 + x * M, y: RIM + FAST.height / 2 + z * M };
+    return { x: this.rim + FAST.width / 2 + x * M, y: this.rim + FAST.height / 2 + z * M };
   }
 
   /** Pointer event -> table-local metres. */
   toTable(e) {
     const r = this.space.getBoundingClientRect();
-    const s = r.width / SPACE_W;
+    const s = r.width / this.spaceW;
     const px = (e.clientX - r.left) / s, py = (e.clientY - r.top) / s;
-    return { x: (px - RIM - FAST.width / 2) / M, z: (py - RIM - FAST.height / 2) / M };
+    return { x: (px - this.rim - FAST.width / 2) / M, z: (py - this.rim - FAST.height / 2) / M };
   }
 
   place(el, x, z, yaw, w, h) {
@@ -172,7 +174,7 @@ export class FlatView {
       const a = -t.pose.yaw;
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const along = (e.clientX - cx) * Math.cos(a) + (e.clientY - cy) * Math.sin(a);
-      const scale = this.space.getBoundingClientRect().width / SPACE_W;
+      const scale = this.space.getBoundingClientRect().width / this.spaceW;
       this.model.setSlider(t.def.id, 0.5 + along / (len * M * scale));
     };
     let drag = false;
