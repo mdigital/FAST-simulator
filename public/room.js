@@ -5,6 +5,7 @@
 // Everything is procedural (geometry + canvas textures): nothing to download.
 
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 const ROOM = { w: 20, d: 20, h: 4.2 };
 
@@ -20,11 +21,11 @@ export function buildRoom(cx, cz) {
 
   const carpet = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.w, ROOM.d).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ map: carpetTexture(ROOM.w / 2.5), roughness: 1 })
+    new THREE.MeshStandardMaterial({ map: carpetTexture(ROOM.w / 2.5), color: 0x8f8984, roughness: 1 })
   );
   room.add(carpet);
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xe9dfd0, roughness: 0.95 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x847b70, roughness: 0.95 });
   const skirtMat = new THREE.MeshStandardMaterial({ color: 0x5a3b28, roughness: 0.6 });
   // Solid walls on three sides; the far wall is glass.
   for (const w of [
@@ -58,14 +59,15 @@ export function buildRoom(cx, cz) {
   ceiling.position.y = ROOM.h;
   room.add(ceiling);
 
-  // Warm gallery lighting, with cool daylight pouring in through the glass.
-  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x6a3f2c, 0.9);
-  const day = new THREE.DirectionalLight(0xeaf2ff, 1.1);
-  day.position.set(-2, 6, -ROOM.d / 2 - 6);
-  day.target.position.set(0, 0, 0);
-  const lamp = new THREE.PointLight(0xffd9a8, 8, 12, 1.6);
-  lamp.position.set(0, ROOM.h - 0.4, 0);
-  room.add(hemi, day, day.target, lamp);
+  // A dim gallery: the daylight comes in through the glass wall (an area
+  // light the size of the wall, plus a soft pool on the carpet), and the
+  // table has its own spotlight (in table-scene.js).
+  RectAreaLightUniformsLib.init();
+  const windowLight = new THREE.RectAreaLight(0xdcebff, 0.7, ROOM.w, ROOM.h);
+  windowLight.position.set(0, ROOM.h / 2, -ROOM.d / 2 + 0.05);
+  windowLight.lookAt(0, ROOM.h / 2, 0);
+  const hemi = new THREE.HemisphereLight(0x9fb4cc, 0x2a1c16, 0.18);
+  room.add(windowLight, hemi, buildDaylightPool(ROOM.w));
   return room;
 }
 
@@ -91,6 +93,20 @@ function buildGlassWall(width, height) {
     g.add(bar);
   }
   return g;
+}
+
+/** Daylight falling on the carpet inside the glass, striped by the mullions. */
+function buildDaylightPool(width) {
+  const depth = 7;
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      map: daylightTexture(Math.round(width / 1.6)), color: 0xcfe2ff, transparent: true, opacity: 0.28,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
+    })
+  );
+  pool.position.set(0, 0.004, -ROOM.d / 2 + depth / 2);
+  return pool;
 }
 
 /** Outside the glass (built toward -z): grassy square, concrete path, trees, sky. */
@@ -317,6 +333,31 @@ function carpetTexture(repeat) {
     }
     g.putImageData(img, 0, 0);
   }, { repeat }));
+}
+
+function daylightTexture(bays) {
+  return cached(`daylight${bays}`, () => {
+    const t = canvasTex(512, (g, S) => {
+      // fades from the glass (top of the texture) into the room
+      const fade = g.createLinearGradient(0, 0, 0, S);
+      fade.addColorStop(0, 'rgba(255,255,255,1)');
+      fade.addColorStop(0.35, 'rgba(255,255,255,.55)');
+      fade.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = fade;
+      g.fillRect(0, 0, S, S);
+      // mullion shadows, slightly slanted as the sun is off to one side
+      g.globalCompositeOperation = 'destination-out';
+      g.fillStyle = 'rgba(0,0,0,.85)';
+      for (let i = 0; i <= bays; i++) {
+        const x = (i / bays) * S;
+        g.beginPath();
+        g.moveTo(x - 2, 0); g.lineTo(x + 2, 0); g.lineTo(x + 40, S); g.lineTo(x + 30, S);
+        g.fill();
+      }
+    }, { srgb: false });
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    return t;
+  });
 }
 
 function grassTexture() {

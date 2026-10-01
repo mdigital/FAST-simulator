@@ -39,6 +39,8 @@ export class TableScene {
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }));
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
     r.outputColorSpace = THREE.SRGBColorSpace;
+    r.toneMapping = THREE.ACESFilmicToneMapping; // contrast between the lit table and the dim room
+    r.toneMappingExposure = 1.1;
     r.xr.enabled = true;
     r.xr.setReferenceSpaceType('local-floor');
     r.xr.setFramebufferScaleFactor(OPTIONS.framebufferScale);
@@ -78,14 +80,11 @@ export class TableScene {
     // Soft reflections so metal (the steel plinth) reads as metal.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    s.environmentIntensity = 0.5;
+    s.environmentIntensity = 0.22;
     pmrem.dispose();
 
-    // Base light that stays on in passthrough, when the room is hidden.
-    s.add(new THREE.HemisphereLight(0xfff4e6, 0x3a2a22, 0.45));
-    const key = new THREE.DirectionalLight(0xffffff, 0.6);
-    key.position.set(1.2, 3, 1.5);
-    s.add(key);
+    // Faint base light that stays on in passthrough, when the room is hidden.
+    s.add(new THREE.HemisphereLight(0xfff4e6, 0x3a2a22, 0.15));
 
     // The gallery: carpet, walls, windows. Hidden in passthrough.
     // Centred behind the viewer so the glass wall is ~6 m beyond the table.
@@ -116,6 +115,18 @@ export class TableScene {
     this.screen = new THREE.Mesh(new THREE.PlaneGeometry(W, D), this.screenMat);
     this.screen.rotation.x = -Math.PI / 2;
     this.table.add(this.screen);
+
+    // Spotlight over the table, so it reads clearly in the dim room.
+    this.spot = new THREE.SpotLight(0xfff1dc, 80, 0, 0.6, 0.5, 1.2);
+    this.spot.position.set(0, 3.2, 0.25);
+    this.spot.target.position.set(0, 0, 0);
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.2, 20), new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.5, metalness: 0.5 }));
+    can.position.set(0, 3.3, 0.25);
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.07, 20).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff3e0 }));
+    glow.position.set(0, 3.199, 0.25);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.8), can.material);
+    rod.position.set(0, 3.8, 0.25); // hangs from the 4.2 m ceiling
+    this.table.add(this.spot, this.spot.target, can, glow, rod);
 
     // Ceiling-mounted projector.
     this.projector = new THREE.Group();

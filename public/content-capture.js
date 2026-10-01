@@ -93,6 +93,11 @@ export class ContentCapture {
     if (c.doc.getAnimations && c.doc.getAnimations().some((a) => a.playState === 'running')) this.dirty = true;
     if (!this.busy && this.dirty && now - this.lastSnap > this.minInterval) this.snap(c);
 
+    // Until the page's first snapshot is ready, keep showing the previous
+    // image (or "Loading…"): drawing only the live media would show e.g. a
+    // bare background canvas, which flashes dark on first load.
+    if (!this.snapshot) return { image: this.composite, changed: false };
+
     const g = this.cctx;
     g.fillStyle = this.pageBg;
     g.fillRect(0, 0, W, H);
