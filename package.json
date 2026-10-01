@@ -1,0 +1,21 @@
+{
+  "name": "fast-simulator",
+  "version": "0.1.0",
+  "description": "Simulator for the FAST digital exhibit table: 1920x1080 touch surface in the browser and in WebXR (Meta Quest hand tracking).",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "fast-sim": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/build-static.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "three": "^0.186.1"
+  }
+}
