@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Object Investigation demo</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body { font: 32px/1.3 system-ui, sans-serif; color: #f4efe6; background: radial-gradient(ellipse at 30% 30%, #3b3127, #17120d); }
+  #prompt { position: absolute; left: 90px; top: 90px; width: 1000px; }
+  #prompt h1 { font-size: 72px; margin: 0 0 20px; }
+  #prompt p { margin: 0 0 14px; color: #d9cbb4; }
+  #feedback { position: absolute; left: 90px; top: 560px; width: 1000px; font-size: 48px; font-weight: 700; min-height: 70px; }
+  #glow {
+    position: absolute; width: 200px; height: 200px; margin: -100px; border-radius: 50%;
+    box-shadow: 0 0 0 10px rgba(255, 210, 120, .7), 0 0 60px 30px rgba(255, 190, 90, .45);
+    animation: pulse 1.6s infinite;
+  }
+  #glow.right { box-shadow: 0 0 0 14px #3ddc84, 0 0 80px 40px rgba(61, 220, 132, .6); animation: none; }
+  #glow.wrong { box-shadow: 0 0 0 14px #ff6b5c, 0 0 60px 30px rgba(255, 107, 92, .5); animation: none; }
+  @keyframes pulse { 50% { transform: scale(1.08); } }
+  #hintArrow { position: absolute; font-size: 44px; color: #ffd27a; transform: translate(-50%, 0); }
+  #lang { position: absolute; right: 60px; top: 40px; font-size: 26px; color: #b9a98f; }
+  #progress { position: absolute; left: 90px; bottom: 60px; color: #b9a98f; }
+</style>
+</head>
+<body>
+  <div id="lang">EN / ES</div>
+  <div id="prompt"></div>
+  <div id="feedback"></div>
+  <div id="glow"></div>
+  <div id="hintArrow">Place the rock here ↓</div>
+  <div id="progress"></div>
+
+<script type="module">
+  import { onFast, getLayout, beep, say } from '../fast-client.js';
+
+  const ROCKS = {
+    granite: { en: ['Granite', 'Formed when magma cooled slowly deep underground, growing big crystals.'], es: ['Granito', 'Se formó cuando el magma se enfrió lentamente bajo tierra y creció en cristales grandes.'] },
+    basalt: { en: ['Basalt', 'Formed when lava cooled quickly on the surface.'], es: ['Basalto', 'Se formó cuando la lava se enfrió rápidamente en la superficie.'] },
+    obsidian: { en: ['Obsidian', 'Volcanic glass: lava cooled so fast that no crystals grew.'], es: ['Obsidiana', 'Vidrio volcánico: la lava se enfrió tan rápido que no se formaron cristales.'] },
+    sandstone: { en: ['Sandstone', 'Grains of sand pressed and cemented together over time.'], es: ['Arenisca', 'Granos de arena prensados y cementados con el tiempo.'] },
+    limestone: { en: ['Limestone', 'Built from shells and skeletons of sea creatures.'], es: ['Caliza', 'Formada por conchas y esqueletos de animales marinos.'] },
+    marble: { en: ['Marble', 'Limestone changed by heat and pressure.'], es: ['Mármol', 'Caliza transformada por el calor y la presión.'] }
+  };
+  const TEXT = {
+    en: { find: 'Can you find…', place: 'Find the rock and place it on the glowing circle.', right: 'Yes! That is', wrong: 'Try again! That was', hint: 'Hint:', done: 'You found them all!' },
+    es: { find: '¿Puedes encontrar…', place: 'Busca la roca y colócala en el círculo brillante.', right: '¡Sí! Es', wrong: '¡Inténtalo de nuevo! Era', hint: 'Pista:', done: '¡Las encontraste todas!' }
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const order = Object.keys(ROCKS).sort(() => Math.random() - 0.5);
+  let lang = 'en', round = 0, onTarget = null;
+
+  const layout = await getLayout();
+  const target = layout?.tools.find((t) => t.type === 'mark') || { x: 1560, y: 900, radius: 0.05 };
+  const pxPerM = layout?.pxPerMeter || 1200;
+  const r = (target.radius || 0.05) * pxPerM;
+  Object.assign($('#glow').style, { left: `${target.x}px`, top: `${target.y}px`, width: `${2 * r + 40}px`, height: `${2 * r + 40}px`, margin: `${-r - 20}px` });
+  Object.assign($('#hintArrow').style, { left: `${target.x}px`, top: `${target.y - r - 110}px` });
+
+  function ask() {
+    const T = TEXT[lang];
+    if (round >= order.length) {
+      $('#prompt').innerHTML = `<h1>${T.done}</h1>`;
+      say(T.done, lang === 'es' ? 'es-ES' : 'en-US');
+      setTimeout(() => location.reload(), 8000);
+      return;
+    }
+    const [name, how] = ROCKS[order[round]][lang];
+    $('#prompt').innerHTML = `<h1>${T.find} ${name}?</h1><p>${T.hint} ${how}</p><p>${T.place}</p>`;
+    $('#progress').textContent = `${round + 1} / ${order.length}`;
+    say(`${T.find} ${name}? ${how}`, lang === 'es' ? 'es-ES' : 'en-US');
+  }
+
+  onFast((m) => {
+    if (m.tool === 'button' && m.id === 'language' && m.state === 'down') {
+      lang = lang === 'en' ? 'es' : 'en';
+      $('#lang').textContent = lang === 'en' ? 'EN / es' : 'en / ES';
+      ask();
+      return;
+    }
+    if (m.tool !== 'tangible') return;
+    const d = Math.hypot(m.x - target.x, m.y - target.y);
+    const inside = m.state !== 'lifted' && d < r;
+    if (inside && onTarget !== m.id) {
+      onTarget = m.id;
+      check(m.id);
+    } else if (!inside && onTarget === m.id) {
+      onTarget = null;
+      $('#glow').className = '';
+      $('#feedback').textContent = '';
+    }
+  });
+
+  function check(id) {
+    const T = TEXT[lang];
+    const name = ROCKS[id]?.[lang][0] ?? id;
+    if (id === order[round]) {
+      $('#glow').className = 'right';
+      $('#feedback').textContent = `${T.right} ${name}!`;
+      beep(660); setTimeout(() => beep(990, 200), 150);
+      say(`${T.right} ${name}!`, lang === 'es' ? 'es-ES' : 'en-US');
+      round++;
+      setTimeout(() => { $('#glow').className = ''; $('#feedback').textContent = ''; ask(); }, 3000);
+    } else {
+      $('#glow').className = 'wrong';
+      $('#feedback').textContent = `${T.wrong} ${name}.`;
+      beep(240, 260, 'triangle');
+    }
+  }
+
+  ask();
+</script>
+</body>
+</html>

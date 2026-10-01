@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Tool sandbox</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0d1117; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script type="module">
+  // Full-screen canvas showing every message from the tools.
+  import { onFast, getLayout, beep } from '../fast-client.js';
+
+  const g = document.getElementById('c').getContext('2d');
+  const log = [];
+  const pucks = new Map(); // id -> last tangible/dice message
+  const buttons = new Map(); // `${id}:${index}` -> down
+  let dial = { value: 0, angle: 0 }, slider = 0, toggle = false;
+  const layout = await getLayout();
+  const pxPerM = layout?.pxPerMeter || 1200;
+
+  onFast((m) => {
+    const { type, time, ...rest } = m;
+    log.unshift(JSON.stringify(rest));
+    log.length = Math.min(log.length, 14);
+    if (m.tool === 'button') { buttons.set(`${m.id}:${m.index}`, m.state === 'down'); if (m.state === 'down') beep(400 + m.index * 120, 70); }
+    if (m.tool === 'dial') { dial = m; beep(900, 25, 'square'); }
+    if (m.tool === 'slider') slider = m.value;
+    if (m.tool === 'toggle') toggle = m.on;
+    if (m.tool === 'tangible' || m.tool === 'dice') {
+      if (m.state === 'lifted') pucks.delete(m.id);
+      else pucks.set(m.id, m);
+    }
+  });
+
+  function frame(t) {
+    g.fillStyle = '#0d1117';
+    g.fillRect(0, 0, 1920, 1080);
+
+    // Magic window: a hidden picture that only shows inside the window.
+    const win = [...pucks.values()].find((p) => p.kind === 'window');
+    if (win) {
+      g.save();
+      g.translate(win.x, win.y);
+      g.rotate((win.angle * Math.PI) / 180);
+      g.beginPath();
+      g.rect(-0.075 * pxPerM, -0.05 * pxPerM, 0.15 * pxPerM, 0.1 * pxPerM);
+      g.restore();
+      g.save();
+      g.clip();
+      for (let i = 0; i < 60; i++) {
+        g.fillStyle = `hsl(${(i * 37 + t / 20) % 360} 80% 60%)`;
+        g.beginPath();
+        g.arc((i * 211) % 1920, (i * 137) % 1080, 40 + (i % 5) * 12, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
+
+    g.fillStyle = '#e6edf3';
+    g.font = '600 46px system-ui, sans-serif';
+    g.fillText('Tool sandbox', 60, 80);
+    g.font = '24px system-ui, sans-serif';
+    g.fillStyle = '#8b949e';
+    g.fillText('Every message this page receives from the table’s tools. Move the magic window to reveal the hidden picture.', 60, 120);
+
+    // Readouts
+    g.font = '30px system-ui, sans-serif';
+    g.fillStyle = '#e6edf3';
+    g.fillText(`Dial: ${dial.value} (${Math.round(dial.angle)}°)`, 60, 200);
+    g.fillText(`Slider: ${slider.toFixed(2)}`, 60, 250);
+    g.fillStyle = '#30363d'; g.fillRect(300, 228, 400, 22);
+    g.fillStyle = '#4cc2ff'; g.fillRect(300, 228, 400 * slider, 22);
+    g.fillStyle = '#e6edf3';
+    g.fillText(`Toggle: ${toggle ? 'ON' : 'off'}`, 60, 300);
+    g.fillText('Buttons:', 60, 350);
+    ['#f2c12e', '#e5484d', '#3e8ef7', '#30a46c'].forEach((c, i) => {
+      g.fillStyle = buttons.get(`station1:${i}`) ? c : '#30363d';
+      g.beginPath(); g.arc(230 + i * 60, 340, 22, 0, Math.PI * 2); g.fill();
+    });
+
+    // Dial gauge
+    g.save();
+    g.translate(900, 270);
+    g.strokeStyle = '#30363d'; g.lineWidth = 10;
+    g.beginPath(); g.arc(0, 0, 80, 0, Math.PI * 2); g.stroke();
+    g.rotate((dial.angle * Math.PI) / 180);
+    g.strokeStyle = '#ffd23f'; g.lineWidth = 8;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -70); g.stroke();
+    g.restore();
+
+    // Message log
+    g.font = '20px ui-monospace, monospace';
+    log.forEach((l, i) => {
+      g.fillStyle = `rgba(47, 224, 160, ${1 - i / 15})`;
+      g.fillText(l.slice(0, 120), 60, 460 + i * 30);
+    });
+
+    // Whatever the camera "sees" on the table.
+    for (const p of pucks.values()) {
+      g.save();
+      g.translate(p.x, p.y);
+      g.rotate((p.angle * Math.PI) / 180);
+      g.strokeStyle = p.kind === 'window' ? '#bfe6ff' : '#2fe0a0';
+      g.lineWidth = 4;
+      const r = (p.kind === 'dice' ? 0.035 : 0.07) * pxPerM * 0.5 + 18 + Math.sin(t / 200) * 4;
+      if (p.kind === 'window') g.strokeRect(-0.075 * pxPerM - 10, -0.05 * pxPerM - 10, 0.15 * pxPerM + 20, 0.1 * pxPerM + 20);
+      else { g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); }
+      g.beginPath(); g.moveTo(0, -r); g.lineTo(0, -r - 24); g.stroke(); // heading
+      g.rotate(-(p.angle * Math.PI) / 180);
+      g.fillStyle = '#e6edf3';
+      g.font = '600 22px system-ui';
+      g.textAlign = 'center';
+      g.fillText(`#${p.marker}${p.face ? ` · ${p.face}` : ''}  ${Math.round(p.angle)}°`, 0, r + 34);
+      g.restore();
+    }
+    g.textAlign = 'left';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

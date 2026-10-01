@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // FAST simulator dev server.
 //
-//   /__fastsim/...   the simulator itself
+//   /__fastsim/...   the simulator itself (and its demos)
 //   everything else  your content: a reverse proxy to --target, or a local
-//                    folder (--content, default ./demo)
+//                    folder (--content)
 //
 // Serving the content from the same origin as the simulator is what lets it
 // inject touch events and draw the page onto the 3D table. HTML responses get
@@ -32,7 +32,7 @@ if (args.help) {
 
   --target <url>    proxy this site/dev server as the table content
                     (e.g. http://localhost:5173)
-  --content <dir>   serve a local folder as the content (default: ./demo)
+  --content <dir>   serve a local folder as the content
   --port <n>        port (default 8443, or 8080 with --http)
   --host <addr>     interface to listen on (default 0.0.0.0)
   --http            plain HTTP instead of HTTPS`);
@@ -43,7 +43,7 @@ const useTls = !args.http;
 const port = Number(args.port) || (useTls ? 8443 : 8080);
 const host = args.host || '0.0.0.0';
 const target = args.target ? new URL(args.target) : null;
-const contentDir = path.resolve(args.content || path.join(ROOT, 'demo'));
+const contentDir = args.content ? path.resolve(args.content) : null;
 
 const STATIC_MOUNTS = [
   [`${PREFIX}vendor/three/`, path.join(ROOT, 'node_modules/three/')],
@@ -65,10 +65,13 @@ async function handle(req, res) {
   if (url.pathname === '/__fastsim') return redirect(res, PREFIX);
   for (const [mount, dir] of STATIC_MOUNTS) {
     if (url.pathname.startsWith(mount)) {
-      return serveFile(req, res, dir, decodeURIComponent(url.pathname.slice(mount.length)), false);
+      // Demo pages get the shim like any other content.
+      const inject = url.pathname.startsWith(`${PREFIX}demo/`);
+      return serveFile(req, res, dir, decodeURIComponent(url.pathname.slice(mount.length)), inject);
     }
   }
   if (target) return proxy(req, res);
+  if (!contentDir) return url.pathname === '/' ? redirect(res, PREFIX) : send(res, 404, 'Not found');
   return serveFile(req, res, contentDir, decodeURIComponent(url.pathname.slice(1)), true);
 }
 
@@ -215,8 +218,10 @@ const server = useTls ? https.createServer(ensureCert(), handle) : http.createSe
 server.on('upgrade', proxyUpgrade);
 server.listen(port, host, () => {
   const scheme = useTls ? 'https' : 'http';
-  console.log(`FAST simulator running. Content: ${target ? target.origin : contentDir}\n`);
-  console.log(`  This machine:  ${scheme}://localhost:${port}${PREFIX}`);
-  for (const a of lanAddresses()) console.log(`  Quest / LAN:   ${scheme}://${a}:${port}${PREFIX}`);
+  const content = target ? target.origin : contentDir;
+  const query = content ? '?src=/' : '';
+  console.log(`FAST simulator running.${content ? ` Your content: ${content}` : ' Showing the demos.'}\n`);
+  console.log(`  This machine:  ${scheme}://localhost:${port}${PREFIX}${query}`);
+  for (const a of lanAddresses()) console.log(`  Quest / LAN:   ${scheme}://${a}:${port}${PREFIX}${query}`);
   if (useTls) console.log('\n  The certificate is self-signed: accept the browser warning once per device.');
 });

@@ -12,6 +12,7 @@ export class TouchInjector {
     this.frame = frame;
     this.active = new Map(); // id -> contact
     this.listeners = new Set();
+    this.kind = 'touch'; // or 'mouse': pointerType mouse + plain mouse events
   }
 
   /** Called with (type, contact) after each injected down/move/up. */
@@ -50,6 +51,12 @@ export class TouchInjector {
     this.firePointer(c, 'pointerover', p, target);
     this.firePointer(c, 'pointerenter', p, target, { bubbles: false, cancelable: false });
     const pd = this.firePointer(c, 'pointerdown', p, target);
+    if (this.kind === 'mouse') {
+      this.fireMouse(c, 'mousedown', p, target, 1);
+      focusFor(target);
+      this.emit('down', p);
+      return;
+    }
     const ts = this.fireTouch(c, 'touchstart', p);
     p.touchPrevented = pd.defaultPrevented || ts;
     if (!p.touchPrevented && p.primary) p.scroller = findScroller(c, target);
@@ -73,6 +80,11 @@ export class TouchInjector {
       return;
     }
     this.firePointer(c, 'pointermove', p, this.pointerTarget(c, p), { button: -1 });
+    if (this.kind === 'mouse') {
+      this.fireMouse(c, 'mousemove', p, c.doc.elementFromPoint(x, y) || p.target, 1);
+      this.emit('move', p);
+      return;
+    }
     const tm = this.fireTouch(c, 'touchmove', p);
     if (tm) p.touchPrevented = true;
     // Native touch scrolling: once a drag starts on a scrollable area whose
@@ -92,6 +104,16 @@ export class TouchInjector {
     const c = this.ctx();
     if (!c) { this.active.delete(key); return; }
     const target = this.pointerTarget(c, p);
+    if (this.kind === 'mouse') {
+      this.firePointer(c, 'pointerup', p, target, { buttons: 0 });
+      const hit = c.doc.elementFromPoint(p.x, p.y) || target;
+      this.fireMouse(c, 'mouseup', p, hit, 0);
+      if (!p.moved) this.fireMouse(c, 'click', p, hit, 0);
+      this.active.delete(key);
+      c.win.__fastsim?.capture.delete(p.id);
+      this.emit('up', p);
+      return;
+    }
     if (!p.scrolling) {
       this.firePointer(c, 'pointerup', p, target, { buttons: 0 });
     }
@@ -132,7 +154,7 @@ export class TouchInjector {
     const down = type !== 'pointerup' && type !== 'pointerout' && type !== 'pointerleave' && type !== 'pointercancel';
     const ev = new c.win.PointerEvent(type, {
       bubbles: true, cancelable: true, composed: true, view: c.win,
-      pointerId: p.id, pointerType: 'touch', isPrimary: p.primary,
+      pointerId: p.id, pointerType: this.kind === 'mouse' ? 'mouse' : 'touch', isPrimary: p.primary,
       clientX: p.x, clientY: p.y, screenX: p.x, screenY: p.y,
       width: 20, height: 20, pressure: down ? 0.5 : 0,
       button: 0, buttons: down ? 1 : 0,

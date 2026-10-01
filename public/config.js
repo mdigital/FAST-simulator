@@ -1,41 +1,43 @@
 // Table geometry and simulator options. Everything can be overridden with
-// URL query parameters, e.g. ?src=/my-exhibit/&diag=55&height=0.86
+// URL query parameters, e.g. ?layout=quiz&width=1.8&height=0.8
+//
+// The FAST table (Museum of Science, Boston) is a projector shining a
+// 1920x1080 image down onto a matte tabletop, with physical tools (buttons,
+// dials, sliders, toggles, tangible objects) around and on it. The booklet
+// gives no dimensions, so the physical sizes below are assumptions.
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) && Number.isFinite(+q.get(k)) ? +q.get(k) : d);
 
 const width = 1920;
 const height = 1080;
-const diagInches = num('diag', 55); // visible screen diagonal
-const diagM = diagInches * 0.0254;
-const aspect = width / height;
-const screenH = diagM / Math.sqrt(1 + aspect * aspect);
+const projW = num('width', 1.6); // width of the projected image on the table, metres
 
 export const FAST = {
   width,
   height,
-  diagInches,
-  screenW: screenH * aspect, // metres
-  screenD: screenH, // metres (depth of the screen across the table)
-  tableHeight: num('height', 0.86), // floor to screen surface, metres
-  tilt: num('tilt', 0), // degrees the surface tilts up toward the far side
-  border: num('border', 0.12), // tabletop rim around the screen, metres
-  standoff: num('standoff', 0.25) // gap between the viewer and the near edge, metres
+  projW,
+  projD: projW * (height / width), // depth of the projected image, metres
+  pxPerM: width / projW,
+  tableHeight: num('height', 0.81), // floor to tabletop; usable sitting or standing
+  border: num('border', 0.16), // tabletop rim around the image, where edge tools sit
+  standoff: num('standoff', 0.3) // gap between the viewer and the near edge in VR, metres
 };
 
 export const OPTIONS = {
   src: q.get('src'),
+  layout: q.get('layout'),
+  work: q.get('work'),
+  works: q.get('works') || 'works.json',
+  embed: q.has('embed') && q.get('embed') !== '0',
   view: q.get('view') || 'flat', // flat | 3d
   capture: q.get('capture') || 'auto', // auto | canvas | dom
   domFps: num('domfps', 8),
-  fingers: (q.get('fingers') || 'index').split(','), // index | all | thumb,index,...
   hands: q.get('hands') || 'mesh', // mesh | spheres | boxes
   pokeDown: num('poke', 0.012), // fingertip height (m) that counts as touching
   framebufferScale: num('fbscale', 1)
 };
 
 export function defaultSrc() {
-  // Served by server.js: the content is proxied at the site root.
-  if (location.pathname.startsWith('/__fastsim/')) return '/';
-  return new URL('../demo/', location.href).pathname;
+  return new URL('demo/sandbox/', location.href).href;
 }

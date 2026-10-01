@@ -17,8 +17,17 @@
 <body data-view="flat">
   <header class="bar">
     <strong class="brand">FAST simulator</strong>
+    <select id="work" aria-label="Work" hidden></select>
     <form id="src-form" class="src">
       <input id="src" type="text" spellcheck="false" autocomplete="off" aria-label="Content URL" placeholder="Content URL">
+      <select id="layout" aria-label="Tools on the table">
+        <option value="objects">Objects (A)</option>
+        <option value="quiz">Quiz buttons (B)</option>
+        <option value="dial">Dial (C)</option>
+        <option value="sandbox">All tools</option>
+        <option value="touch">Touch table</option>
+        <option value="open">Mouse</option>
+      </select>
       <button type="submit">Load</button>
     </form>
     <div class="seg" role="group" aria-label="View">
@@ -27,25 +36,29 @@
     </div>
     <button type="button" id="enter-vr" class="xr" disabled>Enter VR</button>
     <button type="button" id="enter-ar" class="xr" disabled>Passthrough</button>
-    <label class="toggle" title="Turn mouse input into touch events, like the real table produces (needs same-origin content)">
-      <input type="checkbox" id="mouse-touch" checked> Mouse = touch
-    </label>
-    <button type="button" id="fullscreen" title="Full screen">⛶</button>
+    <button type="button" id="fullscreen" title="Full screen" aria-label="Full screen">⛶</button>
+    <a id="open-full" class="iconlink" target="_blank" rel="noopener" title="Open in a new tab" aria-label="Open in a new tab">↗</a>
     <span id="status" class="status"></span>
   </header>
 
   <main id="stage">
     <div id="flat-stage">
-      <div id="screen-wrap">
-        <iframe id="content" title="Table content" width="1920" height="1080"
-          allow="autoplay; fullscreen; xr-spatial-tracking"></iframe>
-        <div id="overlay"></div>
+      <div id="table-space">
+        <div id="screen-wrap">
+          <iframe id="content" title="Table content" width="1920" height="1080"
+            allow="autoplay; fullscreen; xr-spatial-tracking"></iframe>
+          <div id="overlay"></div>
+        </div>
+        <div id="tools-layer"></div>
       </div>
     </div>
     <div id="three-stage"></div>
   </main>
 
-  <footer class="hint" id="hint"></footer>
+  <footer class="hint">
+    <span id="about"></span>
+    <span id="hint"></span>
+  </footer>
 
   <script type="module" src="app.js"></script>
 </body>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Node Exploration demo</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0b1a2a; }
+  body { font: 28px/1.3 system-ui, sans-serif; color: #fff; }
+  canvas { position: absolute; inset: 0; }
+  h1 { position: absolute; left: 60px; top: 36px; margin: 0; font-size: 50px; }
+  .sub { position: absolute; left: 62px; top: 102px; color: #9fc3e0; }
+  #callout {
+    position: absolute; width: 520px; padding: 24px 28px; border-radius: 20px;
+    background: rgba(8, 20, 34, .92); border: 3px solid #ff8a5c; box-shadow: 0 12px 30px rgba(0,0,0,.5);
+    transition: left .5s, top .5s;
+  }
+  #callout h2 { margin: 0 0 6px; font-size: 36px; color: #ffb38f; }
+  #callout .risk { font-weight: 700; margin-bottom: 8px; }
+  #turn { position: absolute; bottom: 26px; text-align: center; width: 300px; margin-left: -150px; color: #ffb38f; font-size: 30px; }
+  #turn b { font-size: 54px; vertical-align: middle; display: inline-block; animation: nudge 1.6s infinite; }
+  @keyframes nudge { 50% { transform: rotate(25deg); } }
+</style>
+</head>
+<body>
+  <canvas id="map" width="1920" height="1080"></canvas>
+  <h1>Climate change and world heritage</h1>
+  <div class="sub">Turn the dial to visit each site.</div>
+  <div id="callout"></div>
+  <div id="turn"><b>⟲</b> turn <b>⟳</b></div>
+
+<script type="module">
+  import { onFast, getLayout, beep, say } from '../fast-client.js';
+
+  const SITES = [
+    { name: 'Venice', lat: 45.4, lon: 12.3, risk: 'Flooding', text: 'Higher seas and storm surges flood the city more often each year.' },
+    { name: 'Petra', lat: 30.3, lon: 35.4, risk: 'Flash floods', text: 'Heavier, sudden rain erodes sandstone tombs carved into the cliffs.' },
+    { name: 'Timbuktu', lat: 16.8, lon: -3.0, risk: 'Desertification', text: 'Drifting sand and drought threaten its earthen mosques.' },
+    { name: 'Kilwa Kisiwani', lat: -8.96, lon: 39.5, risk: 'Coastal erosion', text: 'Waves wear away the coral-stone ruins of a medieval port.' },
+    { name: 'Angkor', lat: 13.4, lon: 103.9, risk: 'Drought', text: 'Falling groundwater can make temple foundations sink and crack.' },
+    { name: 'Rapa Nui', lat: -27.1, lon: -109.4, risk: 'Sea-level rise', text: 'Coastal platforms holding the moai face erosion from the ocean.' },
+    { name: 'Machu Picchu', lat: -13.2, lon: -72.5, risk: 'Landslides', text: 'More intense rain loosens the steep slopes around the citadel.' },
+    { name: 'Ilulissat Icefjord', lat: 69.2, lon: -51.1, risk: 'Ice melt', text: 'One of the fastest glaciers on Earth is retreating as the Arctic warms.' }
+  ];
+  const X0 = 140, Y0 = 170, MW = 1640, MH = 820; // map area
+  const px = (s) => ({ x: X0 + ((s.lon + 180) / 360) * MW, y: Y0 + ((80 - s.lat) / 140) * MH });
+
+  const g = document.getElementById('map').getContext('2d');
+  let current = 0, t0 = performance.now();
+
+  const layout = await getLayout();
+  const dial = layout?.tools.find((t) => t.type === 'dial');
+  const turn = document.getElementById('turn');
+  turn.style.left = `${Math.min(1700, Math.max(220, dial ? dial.x : 960))}px`;
+
+  onFast((m) => {
+    if (m.tool !== 'dial') return;
+    current = (current + m.delta + SITES.length) % SITES.length;
+    t0 = performance.now();
+    beep(500 + current * 40, 60);
+    show();
+  });
+
+  function show() {
+    const s = SITES[current], p = px(s);
+    const c = document.getElementById('callout');
+    c.innerHTML = `<h2>${s.name}</h2><div class="risk">${s.risk}</div>${s.text}`;
+    c.style.left = `${Math.min(1920 - 600, Math.max(40, p.x + (p.x > 1200 ? -600 : 60)))}px`;
+    c.style.top = `${Math.min(1080 - 320, Math.max(150, p.y - 100))}px`;
+    say(`${s.name}. ${s.risk}. ${s.text}`);
+  }
+
+  function frame(now) {
+    g.clearRect(0, 0, 1920, 1080);
+    // graticule
+    g.strokeStyle = 'rgba(120, 170, 220, .18)';
+    g.lineWidth = 2;
+    for (let lon = -180; lon <= 180; lon += 30) { const x = X0 + ((lon + 180) / 360) * MW; g.beginPath(); g.moveTo(x, Y0); g.lineTo(x, Y0 + MH); g.stroke(); }
+    for (let lat = -60; lat <= 80; lat += 20) { const y = Y0 + ((80 - lat) / 140) * MH; g.beginPath(); g.moveTo(X0, y); g.lineTo(X0 + MW, y); g.stroke(); }
+    // links between sites, in dial order
+    g.strokeStyle = 'rgba(255, 138, 92, .35)';
+    g.setLineDash([10, 12]);
+    g.beginPath();
+    SITES.forEach((s, i) => { const p = px(s); i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y); });
+    g.closePath();
+    g.stroke();
+    g.setLineDash([]);
+    // nodes
+    SITES.forEach((s, i) => {
+      const p = px(s), sel = i === current;
+      if (sel) {
+        const r = 30 + ((now - t0) / 30) % 40;
+        g.strokeStyle = `rgba(255, 138, 92, ${1 - (r - 30) / 40})`;
+        g.lineWidth = 4;
+        g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.stroke();
+      }
+      g.fillStyle = sel ? '#ff8a5c' : '#9fc3e0';
+      g.beginPath(); g.arc(p.x, p.y, sel ? 18 : 11, 0, Math.PI * 2); g.fill();
+      g.fillStyle = sel ? '#fff' : '#9fc3e0';
+      g.font = `${sel ? 700 : 400} 24px system-ui`;
+      g.fillText(s.name, p.x + 22, p.y + 8);
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  show();
+</script>
+</body>
+</html>

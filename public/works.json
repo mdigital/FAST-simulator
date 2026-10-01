@@ -1,0 +1,40 @@
+{
+  "title": "FAST simulator",
+  "works": [
+    {
+      "id": "quiz",
+      "title": "Quiz Show",
+      "description": "Template B: four stations of shape buttons fuel a rocket together. Keys 1–4, Q–R, A–F, Z–V.",
+      "src": "demo/quiz/",
+      "layout": "quiz"
+    },
+    {
+      "id": "nodes",
+      "title": "Node Exploration",
+      "description": "Template C: turn the dial to move between sites on the map. Keys ← →.",
+      "src": "demo/nodes/",
+      "layout": "dial"
+    },
+    {
+      "id": "objects",
+      "title": "Object Investigation",
+      "description": "Template A: find the mystery rock and place its puck on the circle. L switches language.",
+      "src": "demo/objects/",
+      "layout": "objects"
+    },
+    {
+      "id": "sandbox",
+      "title": "Tool sandbox",
+      "description": "Every tool type, with a live view of the messages the content receives.",
+      "src": "demo/sandbox/",
+      "layout": "sandbox"
+    },
+    {
+      "id": "touch",
+      "title": "Touch table",
+      "description": "Not FAST: the same table as a multi-touch screen.",
+      "src": "demo/touch/",
+      "layout": "touch"
+    }
+  ]
+}

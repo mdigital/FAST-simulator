@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Quiz Show demo</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    font: 30px/1.25 system-ui, sans-serif; color: #fff;
+    background: radial-gradient(ellipse at 50% 40%, #b5532f, #5a2414 60%, #2a0f08);
+  }
+  .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+  h1 { margin: 0 0 10px; font-size: 64px; letter-spacing: 1px; }
+  #tank { width: 560px; height: 46px; border-radius: 23px; background: rgba(0,0,0,.4); margin: 18px auto 0; overflow: hidden; border: 3px solid #fff; }
+  #fuel { height: 100%; width: 0; background: linear-gradient(90deg, #ffd23f, #ff7a1a); transition: width .6s; }
+  #rocket { font-size: 110px; transition: transform 2s ease-in; display: inline-block; }
+  .station {
+    position: absolute; width: 640px; padding: 22px 26px; border-radius: 22px;
+    background: rgba(18, 12, 30, .82); box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  }
+  .station h2 { margin: 0 0 8px; font-size: 30px; color: #ffd8a8; }
+  .station .q { font-weight: 700; margin-bottom: 12px; min-height: 76px; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ans { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.1); font-size: 26px; }
+  .ans svg { width: 34px; height: 34px; flex: none; }
+  .ans.picked { outline: 4px solid #fff; }
+  .ans.right { background: #2f9e5b; }
+  .ans.wrong { opacity: .45; }
+  .timer { height: 8px; background: #ffd23f; border-radius: 4px; margin-top: 12px; transition: width .25s linear; }
+  .idle { opacity: .55; }
+</style>
+</head>
+<body>
+  <div class="center">
+    <h1>Mars Quiz Show</h1>
+    <div id="msg">Press any button to join!</div>
+    <div id="tank"><div id="fuel"></div></div>
+    <div id="rocket">🚀</div>
+  </div>
+  <div id="stations"></div>
+
+<script type="module">
+  import { onFast, getLayout, beep, say } from '../fast-client.js';
+
+  const SHAPES = { diamond: '#f2c12e', circle: '#e5484d', square: '#3e8ef7', triangle: '#30a46c' };
+  const ORDER = ['diamond', 'circle', 'square', 'triangle'];
+  const icon = (s) => `<svg viewBox="0 0 100 100" fill="${SHAPES[s]}">${{
+    diamond: '<polygon points="50,6 94,50 50,94 6,50"/>', circle: '<circle cx="50" cy="50" r="44"/>',
+    square: '<rect x="10" y="10" width="80" height="80" rx="6"/>', triangle: '<polygon points="50,8 94,88 6,88"/>'
+  }[s]}</svg>`;
+
+  const QUESTIONS = [
+    { q: 'What powers the Perseverance rover?', a: ['Solar panels', 'Nuclear battery', 'Wind turbine', 'Gasoline'], right: 1 },
+    { q: 'Why does Mars look red?', a: ['Hot lava', 'Red plants', 'Rusty iron dust', 'Sunsets'], right: 2 },
+    { q: 'What flew on Mars in 2021?', a: ['A balloon', 'A paper plane', 'A rocket', 'A helicopter'], right: 3 },
+    { q: 'How long is a day on Mars?', a: ['About 24½ hours', '10 hours', '3 Earth days', '1 hour'], right: 0 }
+  ];
+
+  const $ = (s) => document.querySelector(s);
+  const stations = new Map(); // station number -> { el, joined, pick }
+  let phase = 'join', qi = 0, fuel = 0, deadline = 0, timer = null;
+
+  // Put a panel in front of each button box, facing its player.
+  const layout = await getLayout();
+  const boxes = layout ? layout.tools.filter((t) => t.type === 'buttons') : [1, 2].map((n, i) => ({ station: n, x: 480 + i * 960, y: 1200, angle: 0 }));
+  for (const b of boxes) {
+    const el = document.createElement('div');
+    el.className = 'station idle';
+    // inside the image, just in from the player's edge, rotated to face them
+    const x = Math.min(1600, Math.max(320, b.x));
+    const inward = b.y > 540 ? 1080 - 210 : 210;
+    el.style.left = `${x - 320}px`;
+    el.style.top = `${inward - 120}px`;
+    el.style.transform = `rotate(${b.angle}deg)`;
+    $('#stations').appendChild(el);
+    stations.set(b.station, { el, joined: false, pick: null });
+  }
+  render();
+
+  onFast((m) => {
+    if (m.tool !== 'button' || m.state !== 'down' || !stations.has(m.station)) return;
+    const s = stations.get(m.station);
+    if (phase === 'join') {
+      if (!s.joined) { s.joined = true; beep(520); render(); if (!timer) startSoon(); }
+    } else if (phase === 'question' && s.joined && s.pick === null) {
+      s.pick = ORDER.indexOf(m.shape);
+      beep(440, 80);
+      // Everyone answered: shorten the timer to 3 seconds.
+      if ([...stations.values()].every((x) => !x.joined || x.pick !== null)) deadline = Math.min(deadline, Date.now() + 3000);
+      render();
+    }
+  });
+
+  function startSoon() {
+    $('#msg').textContent = 'Others can join… starting in 5';
+    let n = 5;
+    timer = setInterval(() => {
+      n--;
+      $('#msg').textContent = n > 0 ? `Others can join… starting in ${n}` : '';
+      if (n <= 0) { clearInterval(timer); ask(); }
+    }, 1000);
+  }
+
+  function ask() {
+    phase = 'question';
+    for (const s of stations.values()) s.pick = null;
+    deadline = Date.now() + 15000;
+    $('#msg').textContent = 'Fuel the rocket: answer with your buttons!';
+    say(QUESTIONS[qi].q);
+    render();
+    timer = setInterval(() => {
+      render();
+      if (Date.now() >= deadline) { clearInterval(timer); reveal(); }
+    }, 250);
+  }
+
+  function reveal() {
+    phase = 'reveal';
+    const q = QUESTIONS[qi];
+    const players = [...stations.values()].filter((s) => s.joined);
+    const right = players.filter((s) => s.pick === q.right).length;
+    fuel = Math.min(1, fuel + right / (players.length * QUESTIONS.length));
+    $('#fuel').style.width = `${fuel * 100}%`;
+    $('#msg').textContent = right ? `Correct! +${right} fuel` : 'Nobody got that one';
+    right ? (beep(660), setTimeout(() => beep(880), 150)) : beep(220, 300, 'square');
+    render();
+    setTimeout(() => (++qi < QUESTIONS.length ? ask() : finish()), 3500);
+  }
+
+  function finish() {
+    phase = 'end';
+    $('#msg').textContent = fuel > 0.5 ? 'Liftoff! Great teamwork.' : 'Almost enough fuel. Try again!';
+    if (fuel > 0.5) $('#rocket').style.transform = 'translateY(-900px)';
+    say($('#msg').textContent);
+    setTimeout(() => location.reload(), 9000);
+  }
+
+  function render() {
+    const q = QUESTIONS[qi];
+    for (const [n, s] of stations) {
+      s.el.classList.toggle('idle', !s.joined);
+      if (phase === 'join' || !s.joined) {
+        s.el.innerHTML = `<h2>Station ${n}</h2><div class="q">${s.joined ? 'Ready!' : 'Press any button to join'}</div>`;
+        continue;
+      }
+      const left = Math.max(0, deadline - Date.now());
+      s.el.innerHTML = `<h2>Station ${n} · Question ${qi + 1} of ${QUESTIONS.length}</h2>
+        <div class="q">${q.q}</div>
+        <div class="answers">${q.a.map((a, i) => `<div class="ans ${s.pick === i ? 'picked' : ''} ${phase === 'reveal' ? (i === q.right ? 'right' : 'wrong') : ''}">${icon(ORDER[i])}${a}</div>`).join('')}</div>
+        ${phase === 'question' ? `<div class="timer" style="width:${(left / 15000) * 100}%"></div>` : ''}`;
+    }
+  }
+</script>
+</body>
+</html>

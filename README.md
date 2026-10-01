@@ -1,131 +1,192 @@
 # FAST table simulator
 
-A simulator for a [FAST](https://informalscience.org/research/fast-flexible-accessible-strategies-for-timely-digital-exhibit-design/)
-style digital exhibit table: a horizontal **1920×1080 multi-touch screen**
-showing any web page you point it at. Use it to try out table content:
+A simulator for the **FAST table**, the projection-based exhibit table from the Museum of Science, Boston's
+[FAST (Flexible, Accessible Strategies for Timely) Digital Exhibit Design](https://informalscience.org/research/fast-flexible-accessible-strategies-for-timely-digital-exhibit-design/)
+project. A projector puts a **1920×1080** image onto a matte tabletop. Visitors don't touch the image. They use
+**physical tools**: shape-coded buttons, dials, sliders, toggles, and tangible objects (pucks, dice and a
+"magic window") that a camera tracks with fiducial markers.
 
-- **in a desktop browser**: a flat view (mouse or a real touchscreen acts as fingers), or a 3D view of the table
-- **in a Meta Quest headset** (WebXR): stand at a virtual table and touch it with your **hands**,
-  in VR or in passthrough over a real table
+Point the simulator at your web page (the 1920×1080 image) and try it:
+
+- **in a browser**: from above in a flat view, or in a 3D view of the table
+- **in a Meta Quest headset** (WebXR): stand at the table and use the tools with your **hands**. Poke buttons, pinch the dial to turn it, and pick pucks up and set them down, in VR or in passthrough
+- **on your website**: list your pieces in `works.json` and embed the simulator with an `<iframe>`
 
 ## Quick start
 
 ```bash
 npm install
-npm start                                     # demo content
-npm start -- --target http://localhost:5173   # your own content (any dev server or site)
+npm start                                     # the demos
+npm start -- --target http://localhost:5173   # your content (any dev server or site)
 npm start -- --content ./path/to/folder       # a local folder of static files
 ```
 
-Then open the printed URL, e.g. `https://localhost:8443/__fastsim/`.
-The certificate is self-signed, so accept the browser warning once on each device.
+Open the URL it prints, e.g. `https://localhost:8443/__fastsim/`. The certificate is self-signed, so accept the warning once per device.
 
-The content is shown in a 1920×1080 iframe. You can also type any URL into the
-address bar at the top, but see [same-origin content](#why-the-dev-server) below.
+## Tools and layouts
+
+The tools on the table come from a **layout**. The presets follow the booklet's three templates:
+
+| Layout | Template | Tools |
+| --- | --- | --- |
+| `objects` | A: Object Investigation | A tray of six pucks, a raised target circle with a tactile arrow, and a square language button |
+| `quiz` | B: Quiz Show | Four stations (two per long side), each a box of ◆ ● ■ ▲ buttons |
+| `dial` | C: Node Exploration | One dial with detents at the front edge |
+| `sandbox` | — | One of each: buttons, dial, slider, toggle, pucks, magic window, die and target |
+| `touch` | not FAST | The image becomes a multi-touch screen |
+| `open` | not FAST | The mouse goes straight to the page, for other interactive web work |
+
+Choose one with `?layout=quiz`, or make your own JSON file and pass `?layout=my-layout.json`:
+
+```json
+{
+  "name": "My exhibit",
+  "pointer": "none",
+  "tools": [
+    { "type": "buttons", "id": "station1", "station": 1, "place": { "edge": "near", "at": 0.3 },
+      "buttons": [ { "shape": "circle", "color": "#e5484d", "key": "1" }, { "shape": "square", "key": "2" } ] },
+    { "type": "dial", "id": "dial", "place": { "edge": "near", "at": 0.7 }, "detents": 12, "keys": ["ArrowLeft", "ArrowRight"] },
+    { "type": "slider", "id": "year", "place": { "edge": "right", "at": 0.5 }, "length": 0.2, "steps": 10 },
+    { "type": "toggle", "id": "layers", "place": { "edge": "left", "at": 0.5 }, "key": "t" },
+    { "type": "tray", "id": "tray", "place": { "edge": "near", "at": 0.5 }, "length": 0.5 },
+    { "type": "tangible", "id": "shell", "marker": 3, "label": "Shell", "color": "#f0d9b5", "home": "tray" },
+    { "type": "tangible", "id": "lens", "marker": 9, "kind": "window", "place": { "x": 1500, "y": 300 } },
+    { "type": "dice", "id": "die", "marker": 20, "place": { "x": 300, "y": 800 } },
+    { "type": "mark", "id": "target", "place": { "x": 1560, "y": 900 }, "radius": 0.05, "arrow": true }
+  ]
+}
+```
+
+- **`place`** is either a point on the image in pixels, `{ "x", "y", "angle" }`, or a spot on the rim, `{ "edge": "near" | "far" | "left" | "right", "at": 0–1 }`.
+  `at` runs left to right as seen by the visitor standing at that edge, and rim tools face that visitor.
+- **`key`/`keys`** make physical keys work in the simulator. With same-origin content they also send real `keydown`/`keyup` events, matching wired buttons wired up as a USB keyboard.
+- **`home: "tray"`** puts a tangible in the tray. Pucks go back there when dropped off the table or double-clicked.
+
+## What your content receives
+
+Each tool action is sent to your page with `window.postMessage`. This works even when the page is on another site:
+
+```js
+window.addEventListener('message', (e) => {
+  const m = e.data;
+  if (m?.type !== 'fast-input') return;
+  // m.tool: 'button' | 'dial' | 'slider' | 'toggle' | 'tangible' | 'dice'
+});
+```
+
+| tool | fields |
+| --- | --- |
+| `button` | `id`, `station`, `index`, `shape`, `state: 'down' \| 'up'` |
+| `dial` | `id`, `delta: +1 \| -1` (one per detent; +1 is clockwise), `value` (running count), `angle` |
+| `slider` | `id`, `value` 0–1, and `step` if the slider has `steps` |
+| `toggle` | `id`, `on` |
+| `tangible` | `id`, `marker`, `kind: 'puck' \| 'window'`, `state: 'placed' \| 'moved' \| 'lifted'`, `x`, `y` (image pixels), `angle` (degrees) |
+| `dice` | the `tangible` fields, plus `face` 1–6 |
+
+Tangibles behave like they do under the table's camera. They only count once they're **on the image**.
+Picking one up sends `lifted`, and putting it down sends `placed`.
+
+When your page loads (or whenever it posts `{ type: 'fast-get-layout' }` to its parent), it receives
+`{ type: 'fast-layout', width, height, pxPerMeter, tools: [...] }`, with every tool's position in image pixels.
+Use it to put text in front of each quiz station, draw arrows next to the dial, or highlight the target circle.
+
+`public/demo/fast-client.js` wraps this up (`onFast`, `getLayout`, plus small `say` and `beep` helpers for the booklet's
+"more than one modality" advice). The demos in `public/demo/` show each template in use.
+
+## Desktop controls
+
+- **Buttons**: click them, or press their keys (quiz: `1`–`4`, `Q`–`R`, `A`–`F`, `Z`–`V`)
+- **Dial**: drag around the knob, scroll over it, or press `←` / `→`
+- **Slider**: drag. **Toggle**: click.
+- **Pucks, window, die**: drag onto the image, scroll to rotate, double-click to put back. Click the die to roll it.
+- **3D view**: the tools work the same way, and dragging anywhere else orbits the camera (right-drag pans, the wheel zooms)
 
 ## On the Quest 2
 
 1. Run `npm start` on a computer on the same Wi-Fi as the headset.
-2. In the Quest Browser, open the `Quest / LAN` URL the server prints
-   (`https://<your-computer-ip>:8443/__fastsim/`) and accept the certificate warning.
-3. Press **Enter VR**, or **Passthrough** to see your room.
-4. Put the controllers down: hand tracking takes over.
-
-In the headset:
+2. In the Quest Browser, open the `Quest / LAN` URL it prints and accept the certificate warning.
+3. Press **Enter VR**, or **Passthrough** to see your room. Put the controllers down to switch to hand tracking.
 
 | Do this | To get |
 | --- | --- |
-| Poke the screen with your index finger | Touch (each hand is a separate touch, so pinch and rotate work two-handed) |
-| Pinch while pointing at the screen | Touch at the end of the ray (for reaching far edges) |
-| Controller trigger | Touch at the end of the ray |
-| Poke the buttons beside the table | Raise or lower the table, move it closer or farther, recenter it in front of you, reload the content, exit |
+| Poke a button or toggle with your fingertip | Press it |
+| Pinch at the dial's edge and move around it | Turn it |
+| Pinch a slider knob | Slide it |
+| Pinch a puck, lift it and set it down | `lifted`, then `placed` where you put it. Turn your hand to rotate it. |
+| Pinch while pointing at something out of reach | A ray that grabs or presses from a distance |
+| Controller trigger | The same ray |
+| Panel beside the table | Raise or lower the table, move it, recenter it, reset the work, exit |
 
-A ring under each fingertip shows where it will touch. It shrinks as you get closer and turns green on contact.
-In passthrough mode, use **Table ▲/▼** and **Recenter** to line the virtual
-screen up with a real table so your fingers hit something solid.
+In passthrough, use **Table ▲/▼** and **Recenter** to line the virtual table up with a real one, so your fingers hit something solid.
 
-If the self-signed certificate is a problem, use USB instead:
-`npm start -- --http --port 8080`, `adb reverse tcp:8080 tcp:8080`, then open
-`http://localhost:8080/__fastsim/` on the headset (WebXR allows `localhost` without HTTPS).
+If the certificate is a problem: run `npm start -- --http --port 8080` and `adb reverse tcp:8080 tcp:8080`, then open `http://localhost:8080/__fastsim/` on the headset.
 
-## Desktop controls
+## Showcasing your work on your website
 
-**Flat view**: the screen scaled to fit the window.
-- Drag: one finger
-- <kbd>Shift</kbd>+drag: two-finger pinch/rotate around where you pressed
-- <kbd>Ctrl</kbd>/<kbd>Alt</kbd>+drag: two-finger pan
-- On a touchscreen, real multi-touch is passed through
-- Untick **Mouse = touch** to give the page ordinary mouse events
+1. `npm run build`. This writes a static `dist/sim/` folder: the simulator, its libraries and the demos.
+2. Edit `dist/sim/works.json` to list your pieces:
+   ```json
+   {
+     "title": "Robin's FAST work",
+     "works": [
+       { "id": "tides", "title": "Tides", "description": "Turn the dial to move through a day.",
+         "src": "/projects/tides/", "layout": "dial" }
+     ]
+   }
+   ```
+   `src` is relative to `works.json`. `layout` is a preset name or a path to your layout JSON.
+3. Upload `dist/sim/` to your site (say at `/fast/`) and link to `/fast/?work=tides`, or embed it:
+   ```html
+   <iframe src="/fast/?work=tides&embed=1"
+           style="width:100%; aspect-ratio:16/10; border:0"
+           allow="xr-spatial-tracking; fullscreen; autoplay"></iframe>
+   ```
+   `embed=1` swaps the full toolbar for a small floating one, and adds a button that opens the simulator in its own tab.
+   An embed pinned to one `work` doesn't show the work picker. Visitors with a Quest can press **Enter VR** right from your page.
 
-**3D view**: click or drag on the screen to touch it. Drag anywhere else to orbit, right-drag to pan, and use the wheel to zoom.
+**Host the works on the same site as the simulator.** The tools work with any URL, but drawing the
+image onto the 3D/VR table needs same-origin access. A cross-origin work shows in the flat view only.
 
-The simulator sends what a real touch table sends: `pointer*` events with
-`pointerType: "touch"`, `touch*` events, and for a tap the compatibility mouse
-events plus `click`. A drag on a scrollable area scrolls it, like on real touch.
-Content that only listens for mouse drags will not work for drags, just as on the table.
-
-## Options (URL parameters)
+## URL parameters
 
 | Param | Default | Meaning |
 | --- | --- | --- |
-| `src` | demo | Content URL |
+| `work` | first in `works.json` | Which work to show |
+| `src` / `layout` | | Show any URL with any layout instead |
+| `works` | `works.json` | Where to read the works list |
+| `embed` | | `1` for the compact embed UI |
 | `view` | `flat` | `flat` or `3d` |
-| `diag` | `55` | Screen diagonal in inches (sets its physical size in VR) |
-| `height` | `0.86` | Floor to screen surface, metres |
-| `tilt` | `0` | Degrees the surface tilts up toward the far side |
-| `border` | `0.12` | Tabletop rim around the screen, metres |
-| `standoff` | `0.25` | Distance from you to the near edge when VR starts, metres |
-| `fingers` | `index` | Fingertips that touch: `index`, `all`, or a list like `thumb,index` |
-| `poke` | `0.012` | How close (m) a fingertip must be to the surface to count as touching |
-| `capture` | `auto` | How the page is drawn on the 3D table: `auto`, `canvas`, `dom` |
+| `width` | `1.6` | Width of the projected image on the table, metres |
+| `height` | `0.81` | Floor to tabletop, metres |
+| `border` | `0.16` | Tabletop rim around the image, where the edge tools sit, metres |
+| `capture` | `auto` | How the page gets onto the 3D table: `auto`, `canvas` or `dom` |
 | `domfps` | `8` | Maximum refresh rate for `dom` capture |
-| `hands` | `mesh` | Hand model: `mesh`, `spheres`, `boxes` |
-| `fbscale` | `1` | XR framebuffer scale (higher is sharper and slower) |
+| `hands` | `mesh` | Hand model in VR: `mesh`, `spheres` or `boxes` |
+| `fbscale` | `1` | XR resolution scale (higher is sharper and slower) |
 
-Example: `/__fastsim/?src=/my-exhibit/&view=3d&diag=65&height=0.8`
+## Notes and assumptions
 
-## Why the dev server?
+- The booklet gives no measurements. The defaults are a 1.6 m wide image, a 0.81 m high table (usable sitting or standing, as the booklet recommends) and a 16 cm rim. Tool sizes are typical for arcade buttons and knobs.
+- The FAST Toolkit's own software and input protocol aren't public in the booklet. The `fast-input` messages and key mappings here are this simulator's own, chosen to be easy to wire to real hardware (e.g. buttons through a USB keyboard encoder).
+- **How the image reaches the 3D table:** a full-screen `<canvas>` app is copied every frame. A regular HTML page is redrawn with html2canvas when it changes, up to `domfps` times a second, with videos and canvases drawn on top live. Use the flat view to judge exactly how the page looks.
+- **Dev server:** it serves the simulator at `/__fastsim/` and your content at every other path. It proxies `--target` (including WebSockets, so hot reload works), and injects `shim.js` into HTML pages. The shim keeps the page animating while VR is running, and keeps WebGL frames readable.
 
-Browsers don't let one page reach inside another site's page. To send touch events into the content and draw it onto the 3D table,
-the simulator has to be on the **same origin** as the content. `server.js` does that:
-
-- `/__fastsim/` is the simulator
-- every other path is your content, either proxied from `--target` (with WebSocket pass-through, so hot reload works) or served from `--content`
-- HTML pages get a small `shim.js` injected before their own scripts. It keeps `requestAnimationFrame` running during VR (Quest pauses it for the 2D page), lets `setPointerCapture` work with simulated fingers, and keeps WebGL frames readable
-
-Cross-origin URLs still load in the flat view, where you can use them with a real mouse or touchscreen, but simulated touch and the 3D/VR table are not available for them.
-
-### Static hosting
-
-`npm run build` writes `dist/` (simulator in `dist/sim/`, demo in `dist/demo/`).
-Host it on GitHub Pages or similar, with your content on the same site.
-The shim then loads after the content's scripts start, which works for most pages.
-
-## How the 3D table gets its picture
-
-- **Full-screen `<canvas>` apps** (WebGL, PixiJS, p5, …): the canvas is copied to the table every frame.
-- **Regular HTML pages**: rendered with html2canvas when the page changes, up to `domfps` times a second. Videos and canvases on the page are drawn live on top.
-  html2canvas is not a browser, so some CSS (filters, complex shadows, some transforms, scrolled overflow areas) can look slightly off on the 3D table. Use the flat view as the reference for how the page looks, and the headset to judge reach, scale and touch.
-
-## Assumptions
-
-The [FAST booklet](https://informalscience.org/wp-content/uploads/2024/11/FAST_Booklet_00.pdf)
-could not be read while this was built. The defaults are general assumptions for
-a museum touch table: a 55" landscape screen, a horizontal surface 0.86 m high, and a 12 cm rim.
-They are not taken from the FAST spec. Adjust them with the URL parameters above
-(or the defaults in `public/config.js`) to match the real table.
-
-## Layout
+## Layout of this repo
 
 ```
-server.js                 dev server: static files, reverse proxy, shim injection, HTTPS
-public/                   the simulator (served at /__fastsim/)
-  app.js                  UI, flat view, mouse/touch → simulated fingers
-  table-scene.js          three.js table, WebXR hands/controllers, in-VR panel
-  touch-injector.js       turns finger contacts into pointer/touch/mouse events in the content
-  content-capture.js      copies the content into a texture for the 3D table
+server.js                 dev server: static files, proxy, shim injection, HTTPS
+public/                   the simulator (served at /__fastsim/, built to dist/sim/)
+  app.js                  page wiring: works, layouts, views, keyboard, embed mode
+  layouts.js              tool layout presets and placement
+  model.js                tool state + the messages sent to the content
+  flat-view.js            top-down view with HTML tools
+  table-scene.js          three.js table, WebXR hands/controllers, VR panel
+  tools3d.js              3D tools and their hand/mouse interaction
+  touch-injector.js       touch/mouse events for the touch and open layouts
+  content-capture.js      copies the page into a texture for the 3D table
   shim.js                 injected into content pages
-  config.js               table dimensions and URL options
-demo/                     sample content (multi-touch cards, scrolling list, canvas paint)
+  config.js               table size and URL options
+  works.json              the works list
+  demo/                   demo content for each template, plus fast-client.js
 scripts/build-static.js   static build into dist/
 ```

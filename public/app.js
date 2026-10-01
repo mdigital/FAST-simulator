@@ -1,31 +1,97 @@
 import { FAST, OPTIONS, defaultSrc } from './config.js';
 import { TouchInjector } from './touch-injector.js';
 import { ContentCapture } from './content-capture.js';
+import { loadLayout, PRESETS } from './layouts.js';
+import { FastModel } from './model.js';
+import { FlatView, SPACE_W, SPACE_H } from './flat-view.js';
 
 const $ = (sel) => document.querySelector(sel);
 const frame = $('#content');
-const wrap = $('#screen-wrap');
+const space = $('#table-space');
 const flatStage = $('#flat-stage');
 const overlay = $('#overlay');
 const srcInput = $('#src');
+const layoutSelect = $('#layout');
+const workSelect = $('#work');
 const status = $('#status');
-const mouseTouch = $('#mouse-touch');
 const shimUrl = new URL('./shim.js', import.meta.url).href;
 
 const injector = new TouchInjector(frame);
 const capture = new ContentCapture(frame, { mode: OPTIONS.capture, domFps: OPTIONS.domFps });
 let view = OPTIONS.view === '3d' ? '3d' : 'flat';
 let tableScene = null;
+let model = null;
+let flatView = null;
+let layout = null;
+let works = [];
+let worksBase = location.href;
+let current = null; // { id?, title?, description?, src, layout }
 let scale = 1;
 
-// ------------------------------------------------------------------ content
+if (OPTIONS.embed) document.body.classList.add('embed');
 
-function load(src) {
-  srcInput.value = src;
+// ------------------------------------------------------------------ works
+
+async function loadWorks() {
+  try {
+    const url = new URL(OPTIONS.works, location.href);
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    worksBase = url.href;
+    works = (data.works || []).map((w) => ({ ...w, src: new URL(w.src, url).href }));
+    if (data.title && !OPTIONS.embed) $('.brand').textContent = data.title;
+  } catch {
+    works = [];
+  }
+  // An embed pinned to one work shows just that work.
+  workSelect.hidden = works.length === 0 || (OPTIONS.embed && !!OPTIONS.work);
+  document.body.classList.toggle('has-works', works.length > 0);
+  workSelect.replaceChildren(
+    ...works.map((w) => new Option(w.title || w.id, w.id)),
+    new Option('Custom URL…', '')
+  );
+}
+
+workSelect.addEventListener('change', () => {
+  const w = works.find((x) => x.id === workSelect.value);
+  if (w) open(w);
+  else document.body.classList.add('custom');
+});
+
+/** Show a piece of work: content URL + the tools it uses. */
+async function open(work) {
+  current = work;
+  document.body.classList.toggle('custom', !work.id);
+  workSelect.value = work.id || '';
+  srcInput.value = work.src;
+  layoutSelect.value = typeof work.layout === 'string' && PRESETS[work.layout] ? work.layout : layoutSelect.value;
+  layout = await loadLayout(work.layout || 'sandbox', worksBase).catch((err) => {
+    alert(err.message);
+    return loadLayout('sandbox');
+  });
+
+  model?.dispose();
+  flatView?.dispose();
   injector.cancelAll();
-  frame.src = src;
+  model = new FastModel(layout, frame);
+  flatView = new FlatView(space, $('#tools-layer'), model);
+  injector.kind = layout.pointer === 'native' ? 'mouse' : 'touch';
+  document.body.dataset.pointer = layout.pointer;
+  tableScene?.setModel(model, layout.pointer);
+  model.addEventListener('input', (e) => logInput(e.detail));
+
+  $('#about').textContent = [work.title, work.description].filter(Boolean).join(' — ');
+  frame.src = work.src;
+  layoutFlat();
+  updateHint();
   saveParams();
 }
+
+$('#src-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  open({ src: srcInput.value.trim() || defaultSrc(), layout: layoutSelect.value });
+});
 
 frame.addEventListener('load', () => {
   const doc = sameOriginDoc();
@@ -37,6 +103,7 @@ frame.addEventListener('load', () => {
     (doc.head || doc.documentElement).prepend(s);
   }
   capture.markDirty();
+  model?.announce();
   updateStatus();
 });
 
@@ -48,37 +115,38 @@ function sameOriginDoc() {
   }
 }
 
-function updateStatus() {
-  const same = injector.available();
-  document.body.classList.toggle('inject', same && mouseTouch.checked);
-  const mode = view === '3d' && capture.mode ? ` · capture: ${capture.mode}` : '';
-  status.innerHTML = same
-    ? `${FAST.width}×${FAST.height} · ${FAST.diagInches}" · touch injection on${mode}`
-    : `${FAST.width}×${FAST.height} · <span class="warn">cross-origin: no touch emulation or 3D</span>`;
+let lastInput = '';
+function logInput(m) {
+  const { type, time, ...rest } = m;
+  lastInput = Object.entries(rest).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}:${v}`).join(' ');
+  updateStatus();
 }
 
-$('#src-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  load(srcInput.value.trim() || defaultSrc());
-});
-mouseTouch.addEventListener('change', updateStatus);
+function updateStatus() {
+  const same = injector.available();
+  const parts = [];
+  if (!same) parts.push('<span class="warn">cross-origin: tools still work, no 3D image</span>');
+  if (view === '3d' && same && capture.mode) parts.push(`capture: ${capture.mode}`);
+  if (lastInput) parts.push(`<code>${escapeHtml(lastInput)}</code>`);
+  status.innerHTML = parts.join(' · ');
+}
 
 // ---------------------------------------------------------------- flat view
 
 function layoutFlat() {
   if (view !== 'flat') return;
-  const fs = document.fullscreenElement;
-  const pad = fs ? 0 : 56; // room for the drawn bezel/rim
+  const pad = document.fullscreenElement ? 0 : 12;
+  const top = OPTIONS.embed ? 56 : pad; // room for the floating toolbar
   const w = flatStage.clientWidth - pad * 2;
-  const h = flatStage.clientHeight - pad * 2;
-  scale = Math.max(0.05, Math.min(w / FAST.width, h / FAST.height));
-  const x = (flatStage.clientWidth - FAST.width * scale) / 2;
-  const y = (flatStage.clientHeight - FAST.height * scale) / 2;
-  wrap.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  const h = flatStage.clientHeight - pad - top;
+  scale = Math.max(0.05, Math.min(w / SPACE_W, h / SPACE_H));
+  const x = (flatStage.clientWidth - SPACE_W * scale) / 2;
+  const y = top + (h - SPACE_H * scale) / 2;
+  space.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
 }
 new ResizeObserver(layoutFlat).observe(flatStage);
 
-// Mouse / real touchscreen -> touch events in the content.
+// Touch layouts: mouse / real touchscreen -> touch events in the content.
 //   drag            one finger
 //   Shift + drag    two-finger pinch / rotate around where you pressed
 //   Ctrl/Alt + drag two-finger pan
@@ -86,11 +154,12 @@ const gesture = { active: false };
 
 function toContent(e) {
   const r = overlay.getBoundingClientRect();
-  return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+  const s = r.width / FAST.width;
+  return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
 }
 
 overlay.addEventListener('pointerdown', (e) => {
-  if (!injector.available()) return;
+  if (layout?.pointer !== 'touch' || !injector.available()) return;
   overlay.setPointerCapture(e.pointerId);
   const p = toContent(e);
   if (e.pointerType === 'touch' || e.pointerType === 'pen') {
@@ -169,6 +238,13 @@ injector.onContact((type, p) => {
   d.style.top = `${p.y}px`;
 });
 
+// Keyboard drives the tools that have keys (quiz buttons 1-4, dial ←/→ …).
+window.addEventListener('keydown', (e) => {
+  if (e.repeat || e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey) return;
+  if (model?.keyDown(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => model?.keyUp(e.key));
+
 // ------------------------------------------------------------------ 3D view
 
 async function ensureScene() {
@@ -176,8 +252,9 @@ async function ensureScene() {
     const { TableScene } = await import('./table-scene.js');
     tableScene = new TableScene($('#three-stage'), {
       capture, injector, frame,
-      onReload: () => load(srcInput.value)
+      onReload: () => current && open(current)
     });
+    if (model) tableScene.setModel(model, layout.pointer);
   }
   return tableScene;
 }
@@ -232,29 +309,49 @@ async function setupXRButtons() {
 // ------------------------------------------------------------------- chrome
 
 $('#fullscreen').addEventListener('click', () => {
-  const stage = $('#stage');
   if (document.fullscreenElement) document.exitFullscreen();
-  else stage.requestFullscreen?.();
+  else document.documentElement.requestFullscreen?.();
 });
 document.addEventListener('fullscreenchange', layoutFlat);
 
 function updateHint() {
+  const p = layout?.pointer;
+  const tools = 'Buttons: click or keys · dial: drag around, scroll or ←/→ · objects: drag onto the table, scroll to rotate, double-click to put back';
+  const surface = p === 'touch'
+    ? 'Image: drag = finger, <kbd>Shift</kbd>+drag = pinch, <kbd>Ctrl</kbd>+drag = pan'
+    : p === 'native' ? 'Image: mouse goes straight to the page' : 'The projected image itself is not touch-sensitive';
   $('#hint').innerHTML = view === 'flat'
-    ? 'Drag = one finger · <kbd>Shift</kbd>+drag = pinch/rotate · <kbd>Ctrl</kbd>/<kbd>Alt</kbd>+drag = two-finger pan · a touchscreen passes real multi-touch through'
-    : 'Click/drag on the screen = finger · drag elsewhere = orbit · right-drag = pan · wheel = zoom · In VR: poke with your index finger, or pinch/trigger to use a ray';
+    ? `${tools} · ${surface}`
+    : 'Drag tools to use them · drag elsewhere to orbit, right-drag to pan, wheel to zoom · VR: poke buttons, pinch to grab, turn or slide';
 }
 
 function saveParams() {
   const q = new URLSearchParams(location.search);
-  q.set('src', srcInput.value);
+  for (const k of ['work', 'src', 'layout']) q.delete(k);
+  if (current?.id) q.set('work', current.id);
+  else if (current) {
+    q.set('src', current.src);
+    if (typeof current.layout === 'string') q.set('layout', current.layout);
+  }
   q.set('view', view);
   history.replaceState(null, '', `${location.pathname}?${q}`);
+  const full = new URLSearchParams(q);
+  full.delete('embed');
+  $('#open-full').href = `${location.pathname}?${full}`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
 
 // Handy from the devtools console.
-window.fastSim = { injector, capture, get scene() { return tableScene; }, load, setView };
+window.fastSim = { injector, capture, get model() { return model; }, get scene() { return tableScene; }, open, setView };
 
 setInterval(updateStatus, 2000);
-load(OPTIONS.src || defaultSrc());
+await loadWorks();
+const startWork = OPTIONS.src
+  ? { src: OPTIONS.src, layout: OPTIONS.layout || 'sandbox' }
+  : works.find((w) => w.id === OPTIONS.work) || works[0] || { src: defaultSrc(), layout: OPTIONS.layout || 'sandbox' };
+await open(startWork);
 setView(view);
 setupXRButtons();
