@@ -73,6 +73,7 @@ button.xr:not(:disabled) { background: #1d4f6b; border-color: var(--accent); }
 .status code { color: var(--touch); }
 
 body:not(.embed) #open-full { display: none; }
+body:not([data-view="3d"]) #furniture { display: none; }
 
 /* --------------------------------------------------------------- stage */
 

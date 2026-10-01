@@ -4,11 +4,13 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { FAST, OPTIONS } from './config.js';
 import { buildTools } from './tools3d.js';
 import { isPlain, PLAIN_BORDER } from './layouts.js';
+import { buildRoom, buildLegs, buildPlinth, buildStools } from './room.js';
 
 const SLAB = 0.04; // tabletop thickness
 const RELEASE_GAP = 0.012; // hysteresis above the poke threshold before lifting
@@ -31,6 +33,8 @@ export class TableScene {
     this.buttons = [];
     this.model = null;
     this.pointer = 'none';
+    this.furnitureStyle = OPTIONS.furniture === 'plinth' ? 'plinth' : 'stools';
+    this.plain = false;
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }));
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -56,6 +60,8 @@ export class TableScene {
     this.controls = new OrbitControls(this.camera, r.domElement);
     this.controls.target.set(0, this.tableHeight, centerZ + 0.1);
     this.controls.enableDamping = true;
+    this.controls.maxDistance = 4;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // stay above the floor
     this.controls.update();
 
     new ResizeObserver(() => this.resize()).observe(container);
@@ -69,20 +75,20 @@ export class TableScene {
 
   buildEnvironment() {
     const s = this.scene;
-    s.add(new THREE.HemisphereLight(0xdfe6ff, 0x30302c, 0.9));
-    const key = new THREE.DirectionalLight(0xffffff, 0.9);
+    // Soft reflections so metal (the steel plinth) reads as metal.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    s.environmentIntensity = 0.5;
+    pmrem.dispose();
+
+    // Base light that stays on in passthrough, when the room is hidden.
+    s.add(new THREE.HemisphereLight(0xfff4e6, 0x3a2a22, 0.45));
+    const key = new THREE.DirectionalLight(0xffffff, 0.6);
     key.position.set(1.2, 3, 1.5);
     s.add(key);
 
-    this.env = new THREE.Group();
-    const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(8, 64).rotateX(-Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 1 })
-    );
-    this.env.add(floor);
-    const grid = new THREE.GridHelper(16, 32, 0x34383f, 0x2c3036);
-    grid.position.y = 0.001;
-    this.env.add(grid);
+    // The gallery: carpet, walls, windows. Hidden in passthrough.
+    this.env = buildRoom(0, -1);
     s.add(this.env);
   }
 
@@ -94,22 +100,14 @@ export class TableScene {
     this.scene.add(this.table);
 
     const metal = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.5, metalness: 0.6 });
-    const cabinet = new THREE.MeshStandardMaterial({ color: 0x3a3d43, roughness: 0.9 });
 
     // Matte white top: the projection surface.
     this.top = new THREE.Mesh(new THREE.BoxGeometry(TW, SLAB, TD), new THREE.MeshStandardMaterial({ color: 0xcfd0cc, roughness: 1 }));
     this.table.add(this.top);
 
-    this.legs = [];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1, 0.05), metal);
-      leg.position.set(sx * (TW / 2 - 0.05), 0, sz * (TD / 2 - 0.05));
-      this.legs.push(leg);
-      this.table.add(leg);
-    }
-    // Cabinet under the top for the computer.
-    this.cabinet = new THREE.Mesh(new THREE.BoxGeometry(TW * 0.5, 0.3, TD * 0.6), cabinet);
-    this.table.add(this.cabinet);
+    // Legs + stools, or a steel plinth: rebuilt by rebuildFurniture().
+    this.furniture = new THREE.Group();
+    this.table.add(this.furniture);
 
     // The projected image.
     this.texture = null;
@@ -139,8 +137,7 @@ export class TableScene {
   applyHeight() {
     const h = this.tableHeight;
     this.top.position.y = h - SLAB / 2 - 0.001;
-    for (const leg of this.legs) { leg.scale.y = h - SLAB; leg.position.y = (h - SLAB) / 2; }
-    this.cabinet.position.y = h - SLAB - 0.15;
+    this.rebuildFurniture();
     this.screen.position.y = h + 0.0008;
     this.toolsGroup.position.y = h;
     this.projector.position.y = h + 1.25;
@@ -162,6 +159,30 @@ export class TableScene {
     this.setPlain(!!model && isPlain(model.layout));
   }
 
+  /** 'stools': legs with fabric stools around; 'plinth': a steel box to the floor. */
+  setFurniture(style) {
+    this.furnitureStyle = style === 'plinth' ? 'plinth' : 'stools';
+    this.rebuildFurniture();
+  }
+
+  rebuildFurniture() {
+    if (!this.furniture) return;
+    this.furniture.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    this.furniture.clear();
+    const B = this.plain ? PLAIN_BORDER : FAST.border;
+    const TW = FAST.projW + 2 * B, TD = FAST.projD + 2 * B;
+    const base = this.tableHeight - SLAB;
+    if (this.furnitureStyle === 'plinth') {
+      this.furniture.add(buildPlinth(TW, TD, base));
+      this.stools = null;
+    } else {
+      this.furniture.add(buildLegs(TW, TD, base));
+      this.stools = buildStools(TW, TD);
+      this.stools.visible = this.xrMode !== 'immersive-ar';
+      this.furniture.add(this.stools);
+    }
+  }
+
   /** No tools: show a plain touch table (black bezel, thin rim, no projector). */
   setPlain(plain) {
     this.plain = plain;
@@ -170,7 +191,7 @@ export class TableScene {
     this.top.scale.set(TW / (W + 2 * FAST.border), 1, TD / (D + 2 * FAST.border));
     this.top.material.color.set(plain ? 0x111214 : 0xcfd0cc);
     this.top.material.roughness = plain ? 0.35 : 1;
-    this.legs.forEach((leg, i) => leg.position.set((i < 2 ? -1 : 1) * (TW / 2 - 0.05), leg.position.y, (i % 2 ? 1 : -1) * (TD / 2 - 0.05)));
+    this.rebuildFurniture();
     this.projector.visible = !plain && this.xrMode !== 'immersive-ar';
     this.screenMat.color.set(plain ? 0xffffff : 0xf0f0f0);
     this.panel.position.x = TW / 2 + 0.14;
@@ -564,6 +585,7 @@ export class TableScene {
     const ar = this.xrMode === 'immersive-ar';
     this.env.visible = !ar;
     this.projector.visible = !ar && !this.plain;
+    if (this.stools) this.stools.visible = !ar;
     this.scene.background = ar ? null : this.background;
     this.panel.visible = true;
     this.controls.enabled = false;
@@ -573,6 +595,7 @@ export class TableScene {
     this.env.visible = true;
     this.xrMode = null;
     this.projector.visible = !this.plain;
+    if (this.stools) this.stools.visible = true;
     this.scene.background = this.background;
     this.panel.visible = false;
     this.controls.enabled = true;

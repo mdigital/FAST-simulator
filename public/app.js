@@ -267,6 +267,7 @@ async function ensureScene() {
       capture, injector, frame,
       onReload: () => current && open(current)
     });
+    tableScene.setFurniture($('#furniture').value);
     if (model) tableScene.setModel(model, layout.pointer);
   }
   return tableScene;
@@ -287,6 +288,13 @@ async function setView(v) {
   updateHint();
   updateStatus();
 }
+
+const furnitureSelect = $('#furniture');
+furnitureSelect.value = OPTIONS.furniture === 'plinth' ? 'plinth' : 'stools';
+furnitureSelect.addEventListener('change', () => {
+  tableScene?.setFurniture(furnitureSelect.value);
+  saveParams();
+});
 
 for (const b of document.querySelectorAll('[data-view-btn]')) {
   b.addEventListener('click', () => setView(b.dataset.viewBtn));
@@ -350,6 +358,8 @@ function saveParams() {
     if (typeof current.layout === 'string') q.set('layout', current.layout);
   }
   q.set('view', view);
+  if ($('#furniture').value !== 'stools') q.set('furniture', $('#furniture').value);
+  else q.delete('furniture');
   history.replaceState(null, '', `${location.pathname}?${q}`);
   const full = new URLSearchParams(q);
   full.delete('embed');

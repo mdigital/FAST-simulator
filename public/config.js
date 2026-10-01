@@ -34,6 +34,7 @@ export const OPTIONS = {
   capture: q.get('capture') || 'auto', // auto | canvas | dom
   domFps: num('domfps', 8),
   hands: q.get('hands') || 'mesh', // mesh | spheres | boxes
+  furniture: q.get('furniture') || 'stools', // stools | plinth
   pokeDown: num('poke', 0.012), // fingertip height (m) that counts as touching
   framebufferScale: num('fbscale', 1)
 };

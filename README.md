@@ -109,6 +109,17 @@ Use it to put text in front of each quiz station, draw arrows next to the dial, 
 `public/demo/fast-client.js` wraps this up (`onFast`, `getLayout`, plus small `say` and `beep` helpers for the booklet's
 "more than one modality" advice). The demos in `public/demo/` show each template in use.
 
+## The 3D room
+
+The 3D and VR views put the table in a small gallery: a patterned museum carpet in warm colours, and walls with frosted windows where people walk past as silhouettes.
+Choose the table style with the picker in the toolbar (it appears in 3D view) or with `?furniture=`:
+
+- **Table + stools**: the table on legs, with upholstered cylinder stools in several colours around it. The front-centre is left clear so you can stand there.
+- **Steel plinth**: the top sits on a brushed-steel box with a dark toe-kick, as a museum installation would.
+
+Passthrough hides the room and the stools so you can line the table up with your real surroundings.
+Everything is drawn in code (`public/room.js`), so there are no images or models to download.
+
 ## Desktop controls
 
 - **Buttons**: click them, or press their keys (quiz: `1`–`4`, `Q`–`R`, `A`–`F`, `Z`–`V`)
@@ -178,6 +189,7 @@ image onto the 3D/VR table needs same-origin access. A cross-origin work shows i
 | `capture` | `auto` | How the page gets onto the 3D table: `auto`, `canvas` or `dom` |
 | `domfps` | `8` | Maximum refresh rate for `dom` capture |
 | `hands` | `mesh` | Hand model in VR: `mesh`, `spheres` or `boxes` |
+| `furniture` | `stools` | Table style in 3D/VR: `stools` (table on legs, fabric stools around it) or `plinth` (brushed-steel box to the floor) |
 | `fbscale` | `1` | XR resolution scale (higher is sharper and slower) |
 
 ## Notes and assumptions
@@ -197,6 +209,7 @@ public/                   the simulator (served at /__fastsim/, built to dist/si
   model.js                tool state + the messages sent to the content
   flat-view.js            top-down view with HTML tools
   table-scene.js          three.js table, WebXR hands/controllers, VR panel
+  room.js                 gallery room, carpet, windows, stools and plinth
   tools3d.js              3D tools and their hand/mouse interaction
   touch-injector.js       touch/mouse events for the touch and open layouts
   content-capture.js      copies the page into a texture for the 3D table
