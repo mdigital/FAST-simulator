@@ -136,7 +136,7 @@ Two or more browsers or headsets can share one world. Open the same link with th
 https://<your-computer>:8443/__fastsim/?room=studio&name=Robin
 ```
 
-- **Avatars:** everyone in the room sees everyone else as a coloured avatar (head, hands, name tag) wherever they stand. Desktop players appear at their 3D camera position.
+- **Avatars:** everyone in the room sees everyone else as a simple androgynous mannequin in their colour, with a name tag. Two dot eyes show which way each player is facing. Arms reach to their tracked hands or controllers, and hang at their sides otherwise. The figure is scaled to the player's head height, so a seated player looks seated-sized. Desktop players appear at their 3D camera position.
 - **Shared scene:** the work and table style are shared. Whoever changes them changes them for everyone, and late joiners get the current scene.
 - **The table:** touches and tool actions (buttons, dial, slider, toggle, pucks, dice) are mirrored. Each player's browser runs its own copy of the content and is fed the same input, so content with randomness or timing can drift apart.
 - **Stools:** whoever grabs a stool owns it until it lands, and everyone else sees it fly.
