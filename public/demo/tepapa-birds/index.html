@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Ngā Manu o Aotearoa</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    font: 32px/1.35 Georgia, 'Times New Roman', serif; color: #f3ece0;
+    background: radial-gradient(ellipse at 30% 25%, #2c3a33, #121815 70%);
+  }
+  .sans { font-family: system-ui, sans-serif; }
+  header { position: absolute; left: 90px; top: 60px; right: 90px; display: flex; align-items: baseline; gap: 28px; }
+  header h1 { margin: 0; font-size: 58px; font-weight: 700; letter-spacing: 0.5px; }
+  header .en { color: #b8c6b4; font-size: 34px; font-style: italic; }
+  #dots { margin-left: auto; display: flex; gap: 14px; }
+  #dots i { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #b8c6b4; }
+  #dots i.done { background: #e8c46a; border-color: #e8c46a; }
+  #dots i.now { border-color: #f3ece0; box-shadow: 0 0 0 4px rgba(243, 236, 224, 0.25); }
+
+  /* The prompt */
+  #prompt { position: absolute; left: 90px; top: 210px; width: 1080px; transition: opacity .4s; }
+  #prompt .ask { font-size: 44px; color: #e8c46a; margin-bottom: 18px; }
+  #prompt .clue { font-size: 52px; line-height: 1.25; }
+  #prompt .how { margin-top: 36px; font-size: 28px; color: #b8c6b4; }
+
+  /* Feedback after a wrong answer */
+  #hint {
+    position: absolute; left: 90px; top: 700px; width: 1080px; display: none; align-items: center; gap: 30px;
+    padding: 26px 30px; border-radius: 22px; background: rgba(0, 0, 0, 0.35); border: 2px solid #c9775c;
+  }
+  #hint img { width: 150px; height: 150px; object-fit: cover; border-radius: 50%; }
+  #hint .t { font-size: 38px; color: #f0a98f; }
+  #hint .h { font-size: 30px; }
+
+  /* The reward: the object itself, museum-style */
+  #reward {
+    position: absolute; left: 70px; top: 180px; width: 1240px; height: 840px; display: none; gap: 40px;
+    padding: 34px; box-sizing: border-box; border-radius: 26px; background: #f4efe4; color: #1b1b1b;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5); animation: rise .6s ease-out;
+  }
+  @keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+  #reward .pic { flex: 0 0 560px; display: grid; place-items: center; background: #e7e0d1; border-radius: 14px; overflow: hidden; }
+  #reward .pic img { max-width: 100%; max-height: 100%; }
+  #reward .txt { display: flex; flex-direction: column; }
+  #reward .yes { font: 700 34px system-ui, sans-serif; color: #2e7d4f; }
+  #reward h2 { margin: 6px 0 0; font-size: 76px; line-height: 1; }
+  #reward .en { font-style: italic; font-size: 34px; color: #555; margin-bottom: 26px; }
+  #reward .fact { font-size: 34px; line-height: 1.35; }
+  #reward .label { margin-top: auto; font: 22px/1.4 system-ui, sans-serif; color: #444; border-top: 2px solid #d8cfbd; padding-top: 16px; }
+  #reward .label b { color: #1b1b1b; }
+  #reward .rights { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 6px; background: #1b1b1b; color: #f4efe4; font-size: 20px; }
+
+  #glow {
+    position: absolute; border-radius: 50%;
+    box-shadow: 0 0 0 10px rgba(232, 196, 106, 0.8), 0 0 70px 30px rgba(232, 196, 106, 0.35);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  #glow.right { box-shadow: 0 0 0 14px #5fd38d, 0 0 90px 40px rgba(95, 211, 141, 0.5); animation: none; }
+  #glow.wrong { box-shadow: 0 0 0 14px #e08a6b, 0 0 70px 30px rgba(224, 138, 107, 0.45); animation: none; }
+  @keyframes pulse { 50% { transform: scale(1.07); } }
+  #here { position: absolute; font: 600 30px system-ui, sans-serif; color: #e8c46a; transform: translateX(-50%); white-space: nowrap; }
+
+  #done { position: absolute; inset: 0; display: none; place-content: center; text-align: center; }
+  #done h2 { font-size: 110px; margin: 0; color: #e8c46a; }
+  #done p { font-size: 40px; }
+  footer { position: absolute; left: 90px; bottom: 34px; font: 20px system-ui, sans-serif; color: #8c9a89; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Ngā Manu o Aotearoa</h1>
+    <span class="en">Birds of Aotearoa</span>
+    <div id="dots"></div>
+  </header>
+
+  <section id="prompt">
+    <div class="ask">Can you find…</div>
+    <div class="clue" id="clue"></div>
+    <div class="how sans">Look at the birds in the tray. Place the one you think it is on the glowing circle.</div>
+  </section>
+
+  <section id="hint"><img alt=""><div><div class="t"></div><div class="h sans"></div></div></section>
+
+  <section id="reward">
+    <div class="pic"><img alt=""></div>
+    <div class="txt">
+      <div class="yes">Ka pai! You found it.</div>
+      <h2></h2>
+      <div class="en"></div>
+      <div class="fact"></div>
+      <div class="label"></div>
+    </div>
+  </section>
+
+  <div id="glow"></div>
+  <div id="here">Place a bird here</div>
+
+  <section id="done"><div><h2>Ka pai!</h2><p>You found all the birds.</p><p class="sans" style="font-size:28px;color:#b8c6b4">Images: Te Papa collection</p></div></section>
+
+  <footer id="credit"></footer>
+
+<script type="module">
+  import { onFast, getLayout, beep, say } from '../fast-client.js';
+
+  const $ = (s) => document.querySelector(s);
+  const data = await (await fetch('objects.json')).json();
+  // Absolute image URLs (the 3D view's page capture resolves relative ones against the simulator).
+  for (const o of data.objects) o.image = new URL(o.image, location.href).href;
+  const byKey = new Map(data.objects.map((o) => [o.key, o]));
+  $('#credit').textContent = data.subtitle ? `${data.subtitle}. Te Papa collection.` : 'Te Papa collection.';
+
+  // Where the target circle is on the table.
+  const layout = await getLayout();
+  const target = layout?.tools.find((t) => t.type === 'mark') || { x: 1560, y: 860, radius: 0.06 };
+  const r = (target.radius || 0.06) * (layout?.pxPerMeter || 1200);
+  Object.assign($('#glow').style, { left: `${target.x - r - 18}px`, top: `${target.y - r - 18}px`, width: `${2 * r + 36}px`, height: `${2 * r + 36}px` });
+  Object.assign($('#here').style, { left: `${target.x}px`, top: `${target.y - r - 80}px` });
+
+  const order = shuffle([...data.objects]);
+  let round = 0, onTarget = null, busy = false;
+  $('#dots').innerHTML = order.map(() => '<i></i>').join('');
+
+  function ask() {
+    const o = order[round];
+    $('#reward').style.display = 'none';
+    $('#hint').style.display = 'none';
+    $('#prompt').style.opacity = 1;
+    $('#glow').className = '';
+    $('#here').style.visibility = 'visible';
+    $('#clue').textContent = `…${o.clue}`;
+    [...$('#dots').children].forEach((d, i) => { d.className = i < round ? 'done' : i === round ? 'now' : ''; });
+    say(`Can you find ${o.clue}`, 'en-NZ');
+  }
+
+  function check(key) {
+    const placed = byKey.get(key);
+    const want = order[round];
+    if (!placed || busy) return;
+    if (placed === want) {
+      busy = true;
+      $('#glow').className = 'right';
+      $('#here').style.visibility = 'hidden';
+      $('#prompt').style.opacity = 0;
+      $('#hint').style.display = 'none';
+      showReward(want);
+      beep(660); setTimeout(() => beep(880), 140); setTimeout(() => beep(1175, 220), 280);
+      say(`Ka pai! That's the ${want.name}. ${want.fact}`, 'en-NZ');
+      setTimeout(() => {
+        busy = false;
+        round++;
+        if (round < order.length) ask(); else finish();
+      }, 9000);
+    } else {
+      $('#glow').className = 'wrong';
+      const h = $('#hint');
+      h.querySelector('img').src = placed.image;
+      h.querySelector('.t').textContent = `Try again! That's the ${placed.name}.`;
+      h.querySelector('.h').textContent = `Hint: ${want.hint}`;
+      h.style.display = 'flex';
+      beep(260, 260, 'triangle');
+      say(`Try again. That's the ${placed.name}. ${want.hint}`, 'en-NZ');
+    }
+  }
+
+  function showReward(o) {
+    const el = $('#reward');
+    el.querySelector('.pic img').src = o.image;
+    el.querySelector('h2').textContent = o.name;
+    el.querySelector('.en').textContent = o.english && o.english.toLowerCase() !== o.name.toLowerCase() ? o.english : '';
+    el.querySelector('.fact').textContent = o.fact;
+    el.querySelector('.label').innerHTML =
+      `<b>${esc(o.title)}</b><br>${esc([o.maker, o.date].filter(Boolean).join(', '))}` +
+      `${o.creditLine ? `<br>${esc(o.creditLine)}` : ''}<br>Te Papa (${esc(o.identifier ?? String(o.id))}) · collections.tepapa.govt.nz/object/${o.id}` +
+      `<br><span class="rights">${esc(o.rights)}</span>`;
+    el.style.display = 'flex';
+  }
+
+  function finish() {
+    $('#prompt').style.opacity = 0;
+    $('#reward').style.display = 'none';
+    $('#glow').style.display = 'none';
+    $('#here').style.display = 'none';
+    $('#done').style.display = 'grid';
+    [...$('#dots').children].forEach((d) => { d.className = 'done'; });
+    say('Ka pai! You found all the birds.', 'en-NZ');
+    setTimeout(() => location.reload(), 12000);
+  }
+
+  // Pucks on the target circle (from the table's camera / the simulator).
+  onFast((m) => {
+    if (m.tool !== 'tangible') return;
+    const inside = m.state !== 'lifted' && Math.hypot(m.x - target.x, m.y - target.y) < r;
+    if (inside && onTarget !== m.id) {
+      onTarget = m.id;
+      check(m.id);
+    } else if (!inside && onTarget === m.id) {
+      onTarget = null;
+      if (!busy) { $('#glow').className = ''; $('#hint').style.display = 'none'; }
+    }
+  });
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+
+  ask();
+</script>
+</body>
+</html>

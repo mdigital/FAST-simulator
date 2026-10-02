@@ -105,9 +105,13 @@ export async function loadLayout(spec, base = location.href) {
   if (!spec) return normalize(PRESETS.sandbox);
   if (typeof spec === 'object') return normalize(spec);
   if (PRESETS[spec]) return normalize(PRESETS[spec]);
-  const res = await fetch(new URL(spec, base));
+  const url = new URL(spec, base);
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Layout ${spec}: HTTP ${res.status}`);
-  return normalize(await res.json());
+  const layout = await res.json();
+  // Puck images are relative to the layout file.
+  for (const t of layout.tools || []) if (t.image) t.image = new URL(t.image, url).href;
+  return normalize(layout);
 }
 
 function normalize(layout) {

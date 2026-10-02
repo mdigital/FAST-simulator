@@ -163,6 +163,25 @@ With **Table + stools**, the stools are physical objects (cannon-es):
   - A stool that lands on the tabletop slides itself off, so nothing covers the screen.
 - **Tidy up:** *Stools* on the VR panel puts them all back around the table, for everyone.
 
+## Ngā Manu o Aotearoa (Te Papa Object Investigation)
+
+The first work in the list is a version of the booklet's Object Investigation template, built from Te Papa's collection.
+Six pucks in a tray carry J.G. Keulemans' 1873 plates for Walter Buller's *A History of the Birds of New Zealand*: kākāpō, huia, tūī, takahē, kiwi and kererū.
+
+- **Play:** the table gives a clue ("Can you find… the world's heaviest parrot…"), and you place a puck on the glowing circle.
+  - **Wrong bird:** "Try again!", with a visual hint.
+  - **Right bird:** the plate appears full size with a fact and a museum label (title, artist, date, Te Papa registration number, Collections Online link and rights statement).
+  - Clues are spoken aloud too. After all six, it restarts.
+- **Cache:** everything is cached in `public/demo/tepapa-birds/`, and the work runs without the API.
+- **Make your own:** copy `investigation.config.json`, list Te Papa object ids with your own name, clue, hint and fact for each, and run:
+  ```bash
+  TEPAPA_API_KEY=<your key> npm run investigation -- public/demo/<your-folder>/investigation.config.json
+  ```
+  This writes `objects.json`, `layout.json` (a tray with one picture puck per object, plus the target circle) and `images/`. Add an entry to `works.json` pointing at the folder and its `layout.json`.
+  A `"crop": { "zoom": 1.5, "x": 0.5, "y": 0.46 }` on an object adjusts how its picture fills the puck.
+
+Any layout's tangibles can show a picture: give a `tangible` an `"image"` path, relative to the layout file.
+
 ## Posters on the walls
 
 The gallery walls hold New Zealand posters from [Te Papa's collection](https://collections.tepapa.govt.nz/): 1930s Railways tourism posters, the 1940 Centennial Exhibition, MacDonald Gill's map of New Zealand, health and home-front posters, and more.
@@ -283,5 +302,6 @@ public/                   the simulator (served at /__fastsim/, built to dist/si
   demo/                   demo content for each template, plus fast-client.js
 scripts/build-static.js   static build into dist/
 scripts/fetch-posters.js  refreshes the poster cache from the Te Papa API
+scripts/fetch-investigation.js  builds an Object Investigation from Te Papa objects
 posters.config.json       which posters to hang
 ```

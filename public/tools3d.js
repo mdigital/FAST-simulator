@@ -286,7 +286,7 @@ class TangibleTool extends Tool {
     } else {
       this.height = 0.022;
       const side = mat(def.color || 0xdddddd, { roughness: 0.7 });
-      const top = new THREE.MeshStandardMaterial({ map: puckTop(def.label ?? `#${def.marker}`, def.color || '#dddddd'), roughness: 0.7 });
+      const top = new THREE.MeshStandardMaterial({ map: puckTop(def.label ?? `#${def.marker}`, def.color || '#dddddd', def.image, def.crop), roughness: 0.7 });
       this.body = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, this.height, 40), [side, top, side]);
       this.body.position.y = this.height / 2;
     }
@@ -357,21 +357,48 @@ class TangibleTool extends Tool {
   }
 }
 
-function puckTop(label, color) {
+function puckTop(label, color, image, crop) {
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = 512;
   const g = c.getContext('2d');
+  const S = 512;
+  const drawLabel = (band) => {
+    g.font = `700 ${label.length > 6 ? 64 : 88}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if (band) {
+      g.fillStyle = 'rgba(250, 246, 236, 0.9)';
+      g.fillRect(0, S * 0.74, S, S * 0.26);
+      g.fillStyle = '#1a1a1a';
+      g.font = `700 ${label.length > 6 ? 54 : 64}px system-ui, sans-serif`;
+      g.fillText(label, S / 2, S * 0.855);
+    } else {
+      g.fillStyle = luminance(color) > 0.5 ? '#111' : '#fff';
+      g.fillText(label, S / 2, S / 2);
+    }
+  };
   g.fillStyle = color;
-  g.fillRect(0, 0, 256, 256);
-  g.fillStyle = luminance(color) > 0.5 ? '#111' : '#fff';
-  g.font = `700 ${label.length > 6 ? 40 : 56}px system-ui, sans-serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(label, 128, 128);
+  g.fillRect(0, 0, S, S);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.center.set(0.5, 0.5);
   t.rotation = Math.PI / 2; // cylinder cap UVs run sideways
+  if (!image) {
+    drawLabel(false);
+    return t;
+  }
+  // The object's picture, zoomed in on the subject (like CSS background "cover" x zoom).
+  const cr = { zoom: 1.5, x: 0.5, y: 0.46, ...crop };
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.max(S / img.width, S / img.height) * cr.zoom;
+    const w = img.width * scale, h = img.height * scale;
+    g.drawImage(img, (S - w) * cr.x, (S - h) * cr.y, w, h);
+    drawLabel(true);
+    t.needsUpdate = true;
+  };
+  img.src = image;
+  drawLabel(false);
   return t;
 }
 

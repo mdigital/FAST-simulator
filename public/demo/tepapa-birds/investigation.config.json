@@ -1,0 +1,43 @@
+{
+  "_comment": "Object Investigation from Te Papa's collection. Edit, then run: TEPAPA_API_KEY=... npm run investigation. Each object becomes a puck; 'clue' is the prompt, 'hint' shows after a wrong answer, 'fact' with the reward.",
+  "title": "Ngā Manu o Aotearoa",
+  "subtitle": "Birds of Aotearoa, painted by J.G. Keulemans for Walter Buller's 1873 'A History of the Birds of New Zealand'",
+  "objects": [
+    {
+      "id": 1891204, "name": "Kākāpō", "english": "owl parrot",
+      "clue": "the world's heaviest parrot. It can't fly, it comes out at night, and males 'boom' to call for a mate.",
+      "hint": "Look for a big, moss-green parrot.",
+      "fact": "Kākāpō are critically endangered. Every living kākāpō is known by name and carefully looked after."
+    },
+    {
+      "id": 1891230, "name": "Huia", "english": "huia",
+      "clue": "a bird whose males and females had very different beaks: short and strong for him, long and curved for her.",
+      "hint": "Look for a glossy black bird with orange wattles and a white-tipped tail.",
+      "fact": "The huia lived only in the North Island. It has not been confirmed alive since 1907 and is now extinct."
+    },
+    {
+      "id": 1891238, "name": "Tūī", "english": "parson bird",
+      "clue": "a noisy songbird of clicks, cackles and bell-like notes, wearing a little white tuft at its throat.",
+      "hint": "Look for a dark bird with a white tuft under its chin.",
+      "fact": "Tūī drink nectar from flowers like kōwhai and harakeke, carrying pollen from plant to plant."
+    },
+    {
+      "id": 1891394, "name": "Takahē", "english": "takahē",
+      "clue": "a large flightless bird that people thought was extinct, until it was found again in Fiordland in 1948.",
+      "hint": "Look for a stout blue-green bird with a big red beak.",
+      "fact": "Takahē are still rare, and are cared for on predator-free islands and in sanctuaries."
+    },
+    {
+      "id": 1891487, "name": "Kiwi", "english": "brown kiwi",
+      "clue": "a bird that sniffs out its food: it is the only bird with nostrils at the very tip of its beak.",
+      "hint": "Look for a round brown bird with a long, thin beak.",
+      "fact": "A kiwi egg is enormous for the size of the bird, up to about a fifth of the mother's weight."
+    },
+    {
+      "id": 1891271, "name": "Kererū", "english": "New Zealand pigeon",
+      "clue": "a big native pigeon, and now the only bird large enough to swallow the biggest forest fruits whole and spread their seeds.",
+      "hint": "Look for a plump green pigeon with a white chest.",
+      "fact": "Kererū spread the seeds of trees like taraire, tawa and karaka, helping the forest grow."
+    }
+  ]
+}

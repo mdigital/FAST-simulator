@@ -1,0 +1,85 @@
+{
+  "name": "Ngā Manu o Aotearoa",
+  "pointer": "none",
+  "tools": [
+    {
+      "type": "tray",
+      "id": "tray",
+      "place": {
+        "edge": "near",
+        "at": 0.42
+      },
+      "length": 0.66
+    },
+    {
+      "type": "mark",
+      "id": "target",
+      "place": {
+        "x": 1560,
+        "y": 860
+      },
+      "radius": 0.06,
+      "arrow": true
+    },
+    {
+      "type": "tangible",
+      "id": "kakapo",
+      "marker": 0,
+      "label": "Kākāpō",
+      "image": "images/1891204.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    },
+    {
+      "type": "tangible",
+      "id": "huia",
+      "marker": 1,
+      "label": "Huia",
+      "image": "images/1891230.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    },
+    {
+      "type": "tangible",
+      "id": "tui",
+      "marker": 2,
+      "label": "Tūī",
+      "image": "images/1891238.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    },
+    {
+      "type": "tangible",
+      "id": "takahe",
+      "marker": 3,
+      "label": "Takahē",
+      "image": "images/1891394.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    },
+    {
+      "type": "tangible",
+      "id": "kiwi",
+      "marker": 4,
+      "label": "Kiwi",
+      "image": "images/1891487.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    },
+    {
+      "type": "tangible",
+      "id": "kereru",
+      "marker": 5,
+      "label": "Kererū",
+      "image": "images/1891271.jpg",
+      "color": "#efe7d6",
+      "home": "tray",
+      "diameter": 0.08
+    }
+  ]
+}

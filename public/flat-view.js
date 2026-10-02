@@ -212,6 +212,14 @@ export class FlatView {
   build_tangible(t) {
     const el = div(t.def.kind === 'window' ? 'window' : 'puck');
     el.style.setProperty('--c', t.def.color || '#ddd');
+    if (t.def.image) {
+      // The object's picture on top of the puck, zoomed in on the subject.
+      const c = { zoom: 1.5, x: 0.5, y: 0.46, ...t.def.crop };
+      el.classList.add('has-image');
+      el.style.backgroundImage = `url("${t.def.image}")`;
+      el.style.backgroundSize = `${c.zoom * 100}% auto`;
+      el.style.backgroundPosition = `${c.x * 100}% ${c.y * 100}%`;
+    }
     el.appendChild(div('label', t.def.label ?? `#${t.def.marker}`));
     this.makeDraggable(el, t);
     return el;

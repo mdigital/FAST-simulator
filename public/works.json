@@ -2,6 +2,13 @@
   "title": "FAST simulator",
   "works": [
     {
+      "id": "tepapa-birds",
+      "title": "Ngā Manu o Aotearoa",
+      "description": "Object Investigation with Te Papa's collection: read the clue, find the bird among the pucks and place it on the circle. Keulemans' plates from Buller's 1873 Birds of New Zealand.",
+      "src": "demo/tepapa-birds/",
+      "layout": "demo/tepapa-birds/layout.json"
+    },
+    {
       "id": "quiz",
       "title": "Quiz Show",
       "description": "Template B: four stations of shape buttons fuel a rocket together. Keys 1–4, Q–R, A–F, Z–V.",
