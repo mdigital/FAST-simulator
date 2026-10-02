@@ -1,6 +1,9 @@
 // The 3D table: a projector image on a matte tabletop, with the physical tools.
-// Works on desktop (orbit camera, mouse grabs tools) and in WebXR on Quest
-// (hand tracking: poke buttons, pinch to grab/turn/slide; controllers: ray + trigger).
+// Works on desktop (orbit camera, mouse grabs tools, WASD/arrows to walk) and in
+// WebXR on Quest (hand tracking: poke buttons, pinch to grab/turn/slide/throw,
+// pinch at the floor to teleport; controllers: ray + trigger, thumbsticks).
+// The table stays put in the world (so every player agrees where it is);
+// players move around it.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -10,13 +13,18 @@ import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFa
 import { FAST, OPTIONS } from './config.js';
 import { buildTools } from './tools3d.js';
 import { isPlain, PLAIN_BORDER } from './layouts.js';
-import { buildRoom, buildLegs, buildPlinth, buildStools } from './room.js';
+import { buildRoom, buildLegs, buildPlinth, ROOM } from './room.js';
+import { Physics } from './physics.js';
+import { Avatars } from './avatars.js';
 import { loadPosters, hangPosters } from './posters.js';
 
 const SLAB = 0.04; // tabletop thickness
 const RELEASE_GAP = 0.012; // hysteresis above the poke threshold before lifting
 const PINCH_ON = 0.022, PINCH_OFF = 0.04; // thumb-index distance, metres
 const TIPS = ['index-finger-tip', 'middle-finger-tip'];
+const ROOM_CENTRE = { x: 0, z: 4 };
+const WALK_SPEED = 1.6; // m/s, desktop keys and thumbstick
+const SNAP_TURN = Math.PI / 6;
 
 export class TableScene {
   constructor(container, { capture, injector, frame, onReload }) {
@@ -36,6 +44,12 @@ export class TableScene {
     this.pointer = 'none';
     this.furnitureStyle = OPTIONS.furniture === 'plinth' ? 'plinth' : 'stools';
     this.plain = false;
+    this.net = null;
+    this.player = { x: 0, z: 0, yaw: 0 }; // XR rig offset in the world
+    this.teleports = new Map(); // pointer key -> floor target
+    this.keys = new Set(); // desktop movement keys held
+    this.lastFrame = 0;
+    this.lastPose = 0;
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }));
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -89,8 +103,16 @@ export class TableScene {
 
     // The gallery: carpet, walls, windows. Hidden in passthrough.
     // Centred behind the viewer so the glass wall is ~6 m beyond the table.
-    this.env = buildRoom(0, 4);
+    this.env = buildRoom(ROOM_CENTRE.x, ROOM_CENTRE.z);
     s.add(this.env);
+    this.physics = new Physics(s, { room: ROOM_CENTRE });
+    this.avatars = new Avatars(s);
+    this.teleportMarker = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.28, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x2fe0a0, transparent: true, opacity: 0.85, depthWrite: false })
+    );
+    this.teleportMarker.visible = false;
+    s.add(this.teleportMarker);
     // Te Papa posters on the walls (cached in public/posters/).
     this.posterTargets = [];
     loadPosters().then((list) => { this.posterTargets = hangPosters(this.env, list); });
@@ -188,15 +210,12 @@ export class TableScene {
     const B = this.plain ? PLAIN_BORDER : FAST.border;
     const TW = FAST.projW + 2 * B, TD = FAST.projD + 2 * B;
     const base = this.tableHeight - SLAB;
-    if (this.furnitureStyle === 'plinth') {
-      this.furniture.add(buildPlinth(TW, TD, base));
-      this.stools = null;
-    } else {
-      this.furniture.add(buildLegs(TW, TD, base));
-      this.stools = buildStools(TW, TD);
-      this.stools.visible = this.xrMode !== 'immersive-ar';
-      this.furniture.add(this.stools);
-    }
+    const plinth = this.furnitureStyle === 'plinth';
+    this.furniture.add(plinth ? buildPlinth(TW, TD, base) : buildLegs(TW, TD, base));
+    // Colliders, and the throwable stools (table + stools style only).
+    this.physics.setTable({ x: this.table.position.x, z: this.table.position.z, TW, TD, h: this.tableHeight, style: this.furnitureStyle });
+    this.physics.setStools(!plinth);
+    this.physics.setVisible(this.xrMode !== 'immersive-ar');
   }
 
   /** No tools: show a plain touch table (black bezel, thin rim, no projector). */
@@ -223,10 +242,11 @@ export class TableScene {
     const defs = [
       ['Table ▲', () => this.nudgeHeight(+0.02)],
       ['Table ▼', () => this.nudgeHeight(-0.02)],
-      ['Closer', () => this.nudgeDistance(+0.05)],
-      ['Farther', () => this.nudgeDistance(-0.05)],
+      ['Closer', () => this.stepTowardTable(+0.1)],
+      ['Farther', () => this.stepTowardTable(-0.1)],
       ['Recenter', () => this.recenter()],
-      ['Reset', () => this.onReload?.()],
+      ['Stools', () => this.physics.reset()],
+      ['Reload', () => this.onReload?.()],
       ['Exit', () => this.renderer.xr.getSession()?.end()]
     ];
     const bw = 0.1, bh = 0.04, gap = 0.008;
@@ -246,20 +266,161 @@ export class TableScene {
     this.applyHeight();
   }
 
-  nudgeDistance(d) {
-    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.table.quaternion);
-    this.table.position.addScaledVector(fwd, d);
+  // ------------------------------------------------------------- moving around
+  //
+  // In XR the player is moved by offsetting the reference space, so every
+  // tracked pose (head, hands, controllers) comes out in world coordinates.
+
+  applyPlayer() {
+    if (!this.baseRefSpace) return;
+    const { x, z, yaw } = this.player;
+    // Offset = inverse of the player's transform (translate then turn).
+    const c = Math.cos(-yaw), sn = Math.sin(-yaw);
+    const pos = { x: c * -x + sn * -z, y: 0, z: -sn * -x + c * -z };
+    const q = { x: 0, y: Math.sin(-yaw / 2), z: 0, w: Math.cos(-yaw / 2) };
+    this.renderer.xr.setReferenceSpace(this.baseRefSpace.getOffsetReferenceSpace(new XRRigidTransform(pos, q)));
   }
 
-  // Put the table in front of where the viewer is now looking.
-  recenter() {
+  /** World head position and yaw (XR camera, or the desktop camera). */
+  head() {
     const cam = this.renderer.xr.isPresenting ? this.renderer.xr.getCamera() : this.camera;
-    const pos = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.getWorldQuaternion(new THREE.Quaternion()));
-    const yaw = Math.atan2(-dir.x, -dir.z);
-    const dist = FAST.standoff + FAST.border + FAST.projD / 2;
-    this.table.rotation.set(0, yaw, 0);
-    this.table.position.set(pos.x - Math.sin(yaw) * dist, 0, pos.z - Math.cos(yaw) * dist);
+    const p = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.getWorldQuaternion(new THREE.Quaternion()));
+    return { p, yaw: Math.atan2(-f.x, -f.z) };
+  }
+
+  /** Head position in the rig's own (tracking) space. */
+  headLocal() {
+    const { p } = this.head();
+    const { x, z, yaw } = this.player;
+    const dx = p.x - x, dz = p.z - z, c = Math.cos(-yaw), sn = Math.sin(-yaw);
+    return { x: c * dx + sn * dz, z: -sn * dx + c * dz };
+  }
+
+  /** Move the player so their head ends up over (tx, tz). */
+  teleportTo(tx, tz) {
+    const [cx, cz] = this.clampToRoom(tx, tz);
+    if (!this.renderer.xr.isPresenting) {
+      const { p } = this.head();
+      const d = new THREE.Vector3(cx - p.x, 0, cz - p.z);
+      this.camera.position.add(d);
+      this.controls.target.add(d);
+      return;
+    }
+    const l = this.headLocal(), { yaw } = this.player, c = Math.cos(yaw), sn = Math.sin(yaw);
+    this.player.x = cx - (c * l.x + sn * l.z);
+    this.player.z = cz - (-sn * l.x + c * l.z);
+    this.applyPlayer();
+  }
+
+  /** Turn the player about their head. */
+  snapTurn(angle) {
+    const { p } = this.head();
+    this.player.yaw += angle;
+    this.teleportTo(p.x, p.z);
+  }
+
+  /** Step toward (+) or away from (-) the table along the line to its centre. */
+  stepTowardTable(d) {
+    const { p } = this.head();
+    const to = new THREE.Vector3(this.table.position.x - p.x, 0, this.table.position.z - p.z).normalize();
+    this.teleportTo(p.x + to.x * d, p.z + to.z * d);
+  }
+
+  /** Stand at the front of the table, facing it. */
+  recenter() {
+    const { yaw } = this.head();
+    if (this.renderer.xr.isPresenting) this.snapTurn(-yaw);
+    const z = this.table.position.z + FAST.projD / 2 + FAST.border + FAST.standoff;
+    this.teleportTo(this.table.position.x, z);
+  }
+
+  clampToRoom(x, z) {
+    const m = 0.35;
+    return [
+      THREE.MathUtils.clamp(x, ROOM_CENTRE.x - ROOM.w / 2 + m, ROOM_CENTRE.x + ROOM.w / 2 - m),
+      THREE.MathUtils.clamp(z, ROOM_CENTRE.z - ROOM.d / 2 + m, ROOM_CENTRE.z + ROOM.d / 2 - m)
+    ];
+  }
+
+  /** Where a ray meets the floor, if it does so before anything else and away from the table. */
+  floorHit(ray, picked) {
+    if (ray.direction.y > -0.05) return null;
+    const t = -ray.origin.y / ray.direction.y;
+    if (t <= 0 || t > 25 || (picked && picked.hit.distance < t)) return null;
+    const p = ray.origin.clone().addScaledVector(ray.direction, t);
+    const b = this.physics.tableBox;
+    if (b && Math.abs(p.x - b.x) < b.hx + 0.25 && Math.abs(p.z - b.z) < b.hz + 0.25) return null;
+    const [cx, cz] = this.clampToRoom(p.x, p.z);
+    return Math.abs(cx - p.x) < 0.01 && Math.abs(cz - p.z) < 0.01 ? p : null;
+  }
+
+  startTeleport(key, ray, picked) {
+    const p = this.floorHit(ray, picked);
+    if (!p) return false;
+    this.teleports.set(key, p);
+    return true;
+  }
+
+  updateTeleport(key, ray) {
+    if (!this.teleports.has(key)) return;
+    const p = this.floorHit(ray, this.pick(ray));
+    this.teleports.set(key, p);
+    this.teleportMarker.visible = !!p;
+    if (p) this.teleportMarker.position.set(p.x, 0.01, p.z);
+  }
+
+  endTeleport(key) {
+    if (!this.teleports.has(key)) return false;
+    const p = this.teleports.get(key);
+    this.teleports.delete(key);
+    this.teleportMarker.visible = false;
+    if (p) this.teleportTo(p.x, p.z);
+    return true;
+  }
+
+  /** Desktop: keys held for walking (WASD / arrows; Shift to hurry). */
+  setKey(key, down) {
+    const k = key.toLowerCase();
+    if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) return false;
+    if (down) this.keys.add(k); else this.keys.delete(k);
+    return k !== 'shift';
+  }
+
+  walkDesktop(dt) {
+    const k = this.keys;
+    const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
+    const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
+    if (!fwd && !side) return;
+    const { yaw } = this.head();
+    const speed = WALK_SPEED * (k.has('shift') ? 2 : 1) * dt;
+    const dx = (-Math.sin(yaw) * fwd + Math.cos(yaw) * side) * speed;
+    const dz = (-Math.cos(yaw) * fwd - Math.sin(yaw) * side) * speed;
+    const [tx, tz] = this.clampToRoom(this.controls.target.x + dx, this.controls.target.z + dz);
+    const d = new THREE.Vector3(tx - this.controls.target.x, 0, tz - this.controls.target.z);
+    this.controls.target.add(d);
+    this.camera.position.add(d);
+  }
+
+  /** Controllers: left stick walks, right stick snap-turns. */
+  thumbsticks(dt) {
+    for (const ctrl of this.controllers) {
+      const src = ctrl.userData.source;
+      const axes = src?.gamepad?.axes;
+      if (!axes || src.hand) continue;
+      const x = axes[2] ?? 0, y = axes[3] ?? 0;
+      if (src.handedness === 'left') {
+        if (Math.hypot(x, y) < 0.15) continue;
+        const { p, yaw } = this.head();
+        const dx = (Math.cos(yaw) * x - Math.sin(yaw) * -y) * WALK_SPEED * dt;
+        const dz = (-Math.sin(yaw) * x - Math.cos(yaw) * -y) * WALK_SPEED * dt;
+        this.teleportTo(p.x + dx, p.z + dz);
+      } else {
+        const armed = ctrl.userData.turnArmed !== false;
+        if (armed && Math.abs(x) > 0.7) { this.snapTurn(-Math.sign(x) * SNAP_TURN); ctrl.userData.turnArmed = false; }
+        if (Math.abs(x) < 0.3) ctrl.userData.turnArmed = true;
+      }
+    }
   }
 
   // ------------------------------------------------------------------ input
@@ -271,7 +432,7 @@ export class TableScene {
   /** First thing a ray hits: a tool, a VR panel button, or the image. */
   pick(ray) {
     const rc = new THREE.Raycaster(ray.origin, ray.direction, 0, 30);
-    const list = [...this.targets, this.screen];
+    const list = [...this.targets, ...this.physics.targets, this.screen];
     if (this.panel.visible) list.push(...this.buttons);
     if (this.env.visible) list.push(...this.posterTargets);
     const hit = rc.intersectObjects(list, false)[0];
@@ -311,6 +472,7 @@ export class TableScene {
   }
 
   endGrab(key) {
+    if (this.endTeleport(key)) return;
     const g = this.grabs.get(key);
     if (!g) return;
     this.grabs.delete(key);
@@ -388,7 +550,8 @@ export class TableScene {
       ctrl.addEventListener('selectstart', () => {
         if (ctrl.userData.source?.hand) return;
         const ray = this.rayFrom(ctrl);
-        this.startGrab(`ctrl${i}`, { kind: 'ray', ray }, this.pick(ray));
+        const picked = this.pick(ray);
+        if (!this.startGrab(`ctrl${i}`, { kind: 'ray', ray }, picked)) this.startTeleport(`ctrl${i}`, ray, picked);
       });
       ctrl.addEventListener('selectend', () => this.endGrab(`ctrl${i}`));
       this.scene.add(ctrl);
@@ -412,6 +575,11 @@ export class TableScene {
     }
   }
 
+  /** Everything a pinch can grab: table tools and the stools. */
+  interactives() {
+    return this.physics.enabled && this.physics.stools[0]?.group.visible ? [...this.tools, ...this.physics.stools] : this.tools;
+  }
+
   rayFrom(obj) {
     obj.updateMatrixWorld();
     const origin = new THREE.Vector3().setFromMatrixPosition(obj.matrixWorld);
@@ -428,7 +596,7 @@ export class TableScene {
     const w = hand.joints?.wrist;
     if (!w || !w.visible) return 0;
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(w.getWorldQuaternion(new THREE.Quaternion()));
-    return Math.atan2(-f.x, -f.z) - this.table.rotation.y;
+    return Math.atan2(-f.x, -f.z);
   }
 
   updateHands() {
@@ -451,7 +619,7 @@ export class TableScene {
       // Pinch near a tool grabs it directly; otherwise pinch aims a ray.
       if (pinching && !wasPinching) {
         let best = null, bestD = Infinity;
-        for (const tool of this.tools) {
+        for (const tool of this.interactives()) {
           const r = tool.reach(point);
           if (r !== null && r < bestD) { best = tool; bestD = r; }
         }
@@ -460,8 +628,11 @@ export class TableScene {
           best.grab(ptr, { object: best.targets[0] });
           this.grabs.set(key, { tool: best, ptr });
         } else {
-          this.startGrab(key, { kind: 'ray', ray }, this.pick(ray));
+          const picked = this.pick(ray);
+          if (!this.startGrab(key, { kind: 'ray', ray }, picked)) this.startTeleport(key, ray, picked);
         }
+      } else if (pinching && this.teleports.has(key)) {
+        this.updateTeleport(key, ray);
       } else if (pinching && this.grabs.has(key)) {
         const g = this.grabs.get(key);
         this.moveGrab(key, g.ptr.kind === 'pinch' ? { kind: 'pinch', point, yaw: this.handYaw(hand) } : { kind: 'ray', ray });
@@ -470,8 +641,8 @@ export class TableScene {
       }
 
       // Show the aiming ray only when it's pointing at something out of reach.
-      const near = this.tools.some((t) => t.reach(index) !== null) || this.handNearSurface(i);
-      const grabbedRay = this.grabs.get(key)?.ptr.kind === 'ray';
+      const near = this.interactives().some((t) => t.reach(index) !== null) || this.handNearSurface(i);
+      const grabbedRay = this.grabs.get(key)?.ptr.kind === 'ray' || this.teleports.has(key);
       const hit = !near && this.pick(ray);
       const show = grabbedRay || (hit && (hit.kind !== 'screen' || this.pointer !== 'none'));
       ctrl.userData.line.visible = !!show;
@@ -489,6 +660,7 @@ export class TableScene {
       const ray = this.rayFrom(ctrl);
       const key = `ctrl${index}`;
       if (this.grabs.has(key)) this.moveGrab(key, { kind: 'ray', ray });
+      this.updateTeleport(key, ray);
       const hit = this.pick(ray);
       line.visible = true;
       line.scale.z = hit ? hit.hit.distance : 1.5;
@@ -613,17 +785,26 @@ export class TableScene {
     const ar = this.xrMode === 'immersive-ar';
     this.env.visible = !ar;
     this.projector.visible = !ar && !this.plain;
-    if (this.stools) this.stools.visible = !ar;
+    this.physics.setVisible(!ar);
     this.scene.background = ar ? null : this.background;
     this.panel.visible = true;
     this.controls.enabled = false;
+    // Start where the desktop camera was standing, facing the same way.
+    this.baseRefSpace = this.renderer.xr.getReferenceSpace();
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this.player = { x: this.camera.position.x, z: this.camera.position.z, yaw: Math.atan2(-f.x, -f.z) };
+    this.applyPlayer();
   }
 
   onSessionEnd() {
     this.env.visible = true;
     this.xrMode = null;
     this.projector.visible = !this.plain;
-    if (this.stools) this.stools.visible = true;
+    this.physics.setVisible(true);
+    this.renderer.xr.setReferenceSpace(null);
+    this.baseRefSpace = null;
+    this.teleports.clear();
+    this.teleportMarker.visible = false;
     this.scene.background = this.background;
     this.panel.visible = false;
     this.controls.enabled = true;
@@ -634,6 +815,45 @@ export class TableScene {
   }
 
   // ------------------------------------------------------------------ frame
+
+  // ------------------------------------------------------------- multiplayer
+
+  setNet(net) {
+    this.net = net;
+    this.physics.net = net;
+    if (net.id) this.physics.setMe(net.id);
+    net.on('welcome', (m) => this.physics.setMe(m.id));
+    net.on('pose', (m) => this.avatars.update(net.peers.get(m.from) || { id: m.from }, m));
+    net.on('leave', (m) => this.avatars.remove(m.id));
+    net.on('stool', (m) => this.physics.applyRemote(m));
+  }
+
+  /** Tell the others where our head and hands are (~20 Hz). */
+  sendPose(now) {
+    if (!this.net?.connected || now - this.lastPose < 50 || !this.running) return;
+    this.lastPose = now;
+    const cam = this.renderer.xr.isPresenting ? this.renderer.xr.getCamera() : this.camera;
+    const hp = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld);
+    const hq = cam.getWorldQuaternion(new THREE.Quaternion());
+    const msg = { t: 'pose', h: [...hp.toArray(), ...hq.toArray()].map(r3) };
+    if (this.renderer.xr.isPresenting) {
+      for (let i = 0; i < 2; i++) {
+        const hand = this.hands[i], ctrl = this.controllers[i];
+        const side = (hand.userData.source || ctrl.userData.source)?.handedness === 'left' ? 'l' : 'r';
+        let palm = null, tip = null;
+        if (hand.userData.source) {
+          palm = this.joint(hand, 'middle-finger-metacarpal') || this.joint(hand, 'wrist');
+          tip = this.joint(hand, 'index-finger-tip');
+        } else if (ctrl.userData.source) {
+          const r = this.rayFrom(ctrl);
+          palm = r.origin;
+          tip = r.origin.clone().addScaledVector(r.direction, 0.09);
+        }
+        if (palm && tip) msg[side] = [...palm.toArray(), ...tip.toArray()].map(r3);
+      }
+    }
+    this.net.send(msg);
+  }
 
   start() {
     if (this.running) return;
@@ -654,15 +874,22 @@ export class TableScene {
     try { this.frame.contentWindow?.__fastsim?.tick(); } catch { /* cross-origin */ }
 
     this.updateTexture(this.capture.update(now).image);
+    const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
+    this.lastFrame = now;
 
     if (this.renderer.xr.isPresenting) {
+      this.thumbsticks(dt);
       this.updateHands();
       this.updateControllers();
       this.updatePokes();
       this.updatePanel(now);
     } else {
+      this.walkDesktop(dt);
       this.controls.update();
     }
+    this.physics.step(dt, now);
+    this.avatars.tick(dt);
+    this.sendPose(now);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -688,6 +915,8 @@ export class TableScene {
     this.camera.updateProjectionMatrix();
   }
 }
+
+const r3 = (n) => Math.round(n * 1000) / 1000;
 
 function labelTexture(text) {
   const c = document.createElement('canvas');

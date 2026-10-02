@@ -203,26 +203,21 @@ export function buildPlinth(TW, TD, h) {
 
 export const STOOL_COLOURS = [0x1f3fd1, 0xe0602a, 0x1f9e8f, 0xe3b23c, 0xb8323a, 0x6b8f3a];
 
-/** Upholstered cylinder stools around the table, leaving room at the front-centre to stand. */
-export function buildStools(TW, TD) {
-  const g = new THREE.Group();
+/** Where the stools start, relative to the table centre: room at the front-centre to stand. */
+export function stoolSpots(TW, TD) {
   const gap = 0.38; // stool centre to table edge
   const near = TD / 2 + gap, side = TW / 2 + gap;
-  const spots = [
+  return [
     [-0.33 * TW, near], [0.33 * TW, near],
     [-0.3 * TW, -near], [0, -near], [0.3 * TW, -near],
     [-side, 0], [side, 0]
   ];
-  spots.forEach(([x, z], i) => {
-    const stool = buildStool(STOOL_COLOURS[i % STOOL_COLOURS.length]);
-    stool.position.set(x, 0, z);
-    stool.rotation.y = i * 1.3;
-    g.add(stool);
-  });
-  return g;
 }
 
-function buildStool(colour, r = 0.2, h = 0.45) {
+export const STOOL = { r: 0.2, h: 0.45 };
+
+/** An upholstered cylinder stool; its origin is the bottom centre. */
+export function buildStool(colour, { r = STOOL.r, h = STOOL.h, shadow = true } = {}) {
   const g = new THREE.Group();
   // Lathe profile: a cylinder with softly rounded top and bottom edges.
   const pts = [new THREE.Vector2(0, 0.012)];
@@ -247,12 +242,13 @@ function buildStool(colour, r = 0.2, h = 0.45) {
   );
   seam.rotation.x = Math.PI / 2;
   seam.position.y = h - 0.012;
-  g.add(body, seam, shadowBlob(r * 2.6, r * 2.6, 0.5));
+  g.add(body, seam);
+  if (shadow) g.add(shadowBlob(r * 2.6, r * 2.6, 0.5));
   return g;
 }
 
 /** Soft fake contact shadow on the floor. */
-function shadowBlob(w, d, opacity) {
+export function shadowBlob(w, d, opacity) {
   const m = new THREE.Mesh(
     new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, opacity, depthWrite: false })

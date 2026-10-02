@@ -128,6 +128,41 @@ Choose the table style with the picker in the toolbar (it appears in 3D view) or
 Passthrough hides the room and the stools so you can line the table up with your real surroundings.
 Everything is drawn in code (`public/room.js`), so there are no images or models to download.
 
+## Multiplayer
+
+Two or more browsers or headsets can share one world. Open the same link with the same room name:
+
+```
+https://<your-computer>:8443/__fastsim/?room=studio&name=Robin
+```
+
+- **Avatars:** everyone in the room sees everyone else as a coloured avatar (head, hands, name tag) wherever they stand. Desktop players appear at their 3D camera position.
+- **Shared scene:** the work and table style are shared. Whoever changes them changes them for everyone, and late joiners get the current scene.
+- **The table:** touches and tool actions (buttons, dial, slider, toggle, pucks, dice) are mirrored. Each player's browser runs its own copy of the content and is fed the same input, so content with randomness or timing can drift apart.
+- **Stools:** whoever grabs a stool owns it until it lands, and everyone else sees it fly.
+- The status bar shows who's in the room. `?solo` turns multiplayer off.
+
+Multiplayer needs `server.js`, which runs the relay at `/__fastsim/ws`. The static build (`dist/`) runs single-player. Run `server.js` on any Node host for a shared online version.
+
+## Moving around
+
+- **Desktop 3D:** `W A S D` or the arrow keys walk, and `Shift` hurries. Keys used by the table's tools (e.g. quiz buttons) still go to the tools. Mouse orbit still works.
+- **VR, hands:** point at the floor and pinch, aim the green ring, then release to teleport.
+- **VR, controllers:** the trigger at the floor teleports, the left stick walks, and the right stick snap-turns.
+- **VR panel:** *Closer/Farther* step you toward or away from the table, and *Recenter* puts you at the front of it facing in. The table itself stays put, so every player agrees where it is.
+
+## Throwing stools (physics)
+
+With **Table + stools**, the stools are physical objects (cannon-es):
+
+- **Pick one up:** pinch it, point at it and pinch (it pulls toward your hand), use the trigger, or drag it with the mouse.
+- **Throw:** let go mid-swing and it flies with your hand's speed. It bounces off the walls, the glass and other stools.
+- **The table can't be wrecked:**
+  - It's immovable.
+  - A stool you're holding can't be pushed into it (it rides over the top instead).
+  - A stool that lands on the tabletop slides itself off, so nothing covers the screen.
+- **Tidy up:** *Stools* on the VR panel puts them all back around the table, for everyone.
+
 ## Posters on the walls
 
 The gallery walls hold New Zealand posters from [Te Papa's collection](https://collections.tepapa.govt.nz/): 1930s Railways tourism posters, the 1940 Centennial Exhibition, MacDonald Gill's map of New Zealand, health and home-front posters, and more.
@@ -226,7 +261,7 @@ image onto the 3D/VR table needs same-origin access. A cross-origin work shows i
 ## Layout of this repo
 
 ```
-server.js                 dev server: static files, proxy, shim injection, HTTPS
+server.js                 dev server: static files, proxy, shim injection, HTTPS, multiplayer relay
 public/                   the simulator (served at /__fastsim/, built to dist/sim/)
   app.js                  page wiring: works, layouts, views, keyboard, embed mode
   layouts.js              tool layout presets and placement
@@ -235,6 +270,9 @@ public/                   the simulator (served at /__fastsim/, built to dist/si
   table-scene.js          three.js table, WebXR hands/controllers, VR panel
   room.js                 gallery room, carpet, windows, stools and plinth
   posters.js              Te Papa posters, rights plaques and caption labels on the walls
+  physics.js              throwable stools (cannon-es), table protection, stool sync
+  net.js                  multiplayer client (WebSocket to server.js)
+  avatars.js              other players' heads, hands and name tags
   posters/                cached poster images + posters.json (from scripts/fetch-posters.js)
   tools3d.js              3D tools and their hand/mouse interaction
   touch-injector.js       touch/mouse events for the touch and open layouts

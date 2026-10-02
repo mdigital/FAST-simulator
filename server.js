@@ -21,6 +21,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PREFIX = '/__fastsim/';
@@ -48,6 +49,7 @@ const contentDir = args.content ? path.resolve(args.content) : null;
 const STATIC_MOUNTS = [
   [`${PREFIX}vendor/three/`, path.join(ROOT, 'node_modules/three/')],
   [`${PREFIX}vendor/html2canvas/`, path.join(ROOT, 'node_modules/html2canvas/dist/')],
+  [`${PREFIX}vendor/cannon-es/`, path.join(ROOT, 'node_modules/cannon-es/dist/')],
   [PREFIX, path.join(ROOT, 'public/')]
 ];
 
@@ -133,6 +135,54 @@ function proxy(req, res) {
 }
 
 // WebSocket pass-through (e.g. Vite / webpack hot reload).
+// ------------------------------------------------------------- multiplayer
+//
+// A tiny relay: everyone connected to /__fastsim/ws?room=x gets everyone
+// else's messages. The latest 'scene' and per-stool 'stool' messages are
+// kept so late joiners see the world as it is.
+
+const wss = new WebSocketServer({ noServer: true });
+const rooms = new Map(); // name -> { peers: Map(id -> { ws, info }), cache: Map }
+const COLOURS = ['#4cc2ff', '#ff7a59', '#2fe0a0', '#f2c12e', '#c084fc', '#ff5c8a', '#7bdcb5', '#ffa94d'];
+
+wss.on('connection', (ws, req) => {
+  const q = new URL(req.url, 'http://x').searchParams;
+  const roomName = (q.get('room') || 'lobby').slice(0, 64);
+  let room = rooms.get(roomName);
+  if (!room) rooms.set(roomName, (room = { peers: new Map(), cache: new Map(), n: 0 }));
+  const id = Math.random().toString(36).slice(2, 7);
+  const info = { id, name: (q.get('name') || `Player ${++room.n}`).slice(0, 32), colour: COLOURS[room.peers.size % COLOURS.length] };
+  const send = (w, m) => { if (w.readyState === 1) w.send(JSON.stringify(m)); };
+  const broadcast = (m) => { for (const p of room.peers.values()) if (p.ws !== ws) send(p.ws, m); };
+
+  send(ws, { t: 'welcome', id, you: info, peers: [...room.peers.values()].map((p) => p.info), cache: [...room.cache.values()] });
+  room.peers.set(id, { ws, info });
+  broadcast({ t: 'join', peer: info });
+
+  ws.on('message', (data) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return; }
+    if (!msg || typeof msg.t !== 'string') return;
+    msg.from = id;
+    if (msg.t === 'scene') room.cache.set('scene', msg);
+    if (msg.t === 'stool') room.cache.set(`stool:${msg.i}`, msg);
+    broadcast(msg);
+  });
+  ws.on('close', () => {
+    room.peers.delete(id);
+    broadcast({ t: 'leave', id });
+    if (!room.peers.size) rooms.delete(roomName);
+  });
+});
+
+function onUpgrade(req, socket, head) {
+  if (req.url.split('?')[0] === `${PREFIX}ws`) {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    return;
+  }
+  proxyUpgrade(req, socket, head);
+}
+
 function proxyUpgrade(req, socket, head) {
   if (!target) return socket.destroy();
   const secure = target.protocol === 'https:';
@@ -215,7 +265,7 @@ function parseArgs(list) {
 }
 
 const server = useTls ? https.createServer(ensureCert(), handle) : http.createServer(handle);
-server.on('upgrade', proxyUpgrade);
+server.on('upgrade', onUpgrade);
 server.listen(port, host, () => {
   const scheme = useTls ? 'https' : 'http';
   const content = target ? target.origin : contentDir;

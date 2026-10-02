@@ -4,6 +4,7 @@ import { ContentCapture } from './content-capture.js';
 import { loadLayout, PRESETS } from './layouts.js';
 import { FastModel } from './model.js';
 import { FlatView } from './flat-view.js';
+import { Net } from './net.js';
 
 const $ = (sel) => document.querySelector(sel);
 const frame = $('#content');
@@ -29,6 +30,80 @@ let current = null; // { id?, title?, description?, src, layout }
 let scale = 1;
 
 if (OPTIONS.embed) document.body.classList.add('embed');
+
+// ---------------------------------------------------------------- multiplayer
+//
+// Everyone on the same ?room= shares one world: the same work and table
+// style, each other's avatars, the stools, and every touch and tool action on
+// the table (each player's browser runs its own copy of the content, fed the
+// same input).
+
+const params = new URLSearchParams(location.search);
+const net = Net.available() ? new Net({ room: params.get('room') || 'lobby', name: params.get('name') || '' }) : null;
+let applyingRemote = false;
+const stoolStates = new Map(); // latest per stool, for when the 3D view starts later
+
+// Touches: send ours, inject theirs under their own pointer keys.
+const injectRaw = {};
+for (const k of ['down', 'move', 'up']) {
+  injectRaw[k] = injector[k].bind(injector);
+  injector[k] = (key, x, y) => {
+    injectRaw[k](key, x, y);
+    if (net?.connected && !String(key).startsWith('r:')) net.send({ t: 'touch', k, key, x: Math.round(x ?? 0), y: Math.round(y ?? 0) });
+  };
+}
+
+// Tool actions (buttons, dial, slider, toggle, tangibles, dice).
+const TOOL_METHODS = ['press', 'release', 'dialBy', 'dialSettle', 'setSlider', 'settleSlider', 'flip', 'setPose', 'sendHome', 'setFace'];
+function shareTools(m) {
+  for (const name of TOOL_METHODS) {
+    const orig = m[name].bind(m);
+    m[name] = (...args) => {
+      orig(...args);
+      if (net?.connected && !applyingRemote) net.send({ t: 'tool', m: name, a: args });
+    };
+  }
+  // A roll is random: share the face it landed on.
+  const roll = m.roll.bind(m);
+  m.roll = (id) => {
+    roll(id);
+    if (net?.connected && !applyingRemote) net.send({ t: 'tool', m: 'setFace', a: [id, m.get(id)?.state.face] });
+  };
+}
+
+function sendScene() {
+  if (!net?.connected || !current) return;
+  net.send({ t: 'scene', work: { id: current.id, title: current.title, description: current.description, src: new URL(current.src, location.href).href, layout: current.layout }, furniture: $('#furniture').value });
+}
+
+if (net) {
+  net.on('welcome', (m) => {
+    // First one in the room: our scene becomes the room's.
+    if (!m.cache.some((c) => c.t === 'scene')) sendScene();
+  });
+  net.on('scene', async (m) => {
+    const w = m.work;
+    const same = current && new URL(current.src, location.href).href === w.src && JSON.stringify(current.layout) === JSON.stringify(w.layout);
+    applyingRemote = true;
+    try {
+      if (!same) await open(w);
+      if (m.furniture && $('#furniture').value !== m.furniture) {
+        $('#furniture').value = m.furniture;
+        tableScene?.setFurniture(m.furniture);
+      }
+    } finally {
+      applyingRemote = false;
+    }
+  });
+  net.on('touch', (m) => injectRaw[m.k]?.(`r:${m.from}:${m.key}`, m.x, m.y));
+  net.on('tool', (m) => {
+    if (!model || !TOOL_METHODS.includes(m.m)) return;
+    applyingRemote = true;
+    try { model[m.m](...m.a); } finally { applyingRemote = false; }
+  });
+  net.on('stool', (m) => stoolStates.set(m.i, m));
+  net.on('peers', () => updateStatus());
+}
 
 // ------------------------------------------------------------------ works
 
@@ -80,6 +155,7 @@ async function open(work) {
   flatView?.dispose();
   injector.cancelAll();
   model = new FastModel(layout, frame);
+  shareTools(model);
   flatView = new FlatView(space, $('#tools-layer'), model);
   injector.kind = layout.pointer === 'native' ? 'mouse' : 'touch';
   document.body.dataset.pointer = layout.pointer;
@@ -93,6 +169,7 @@ async function open(work) {
   layoutFlat();
   updateHint();
   saveParams();
+  if (!applyingRemote) sendScene();
 }
 
 $('#src-form').addEventListener('submit', (e) => {
@@ -141,6 +218,7 @@ function updateStatus() {
       : '<span class="warn">other site: your mouse goes straight to the page; for touch emulation and 3D, serve it through the dev server (see README)</span>');
   }
   if (view === '3d' && same && capture.mode) parts.push(`capture: ${capture.mode}`);
+  if (net) parts.push(net.connected ? `👥 ${net.peers.size + 1} in “${escapeHtml(net.room)}”` : '<span class="warn">multiplayer: connecting…</span>');
   if (lastInput) parts.push(`<code>${escapeHtml(lastInput)}</code>`);
   status.innerHTML = parts.join(' · ');
 }
@@ -278,11 +356,17 @@ injector.onContact((type, p) => {
 });
 
 // Keyboard drives the tools that have keys (quiz buttons 1-4, dial ←/→ …).
+// In 3D, other keys walk you around: WASD / arrow keys (Shift to hurry).
 window.addEventListener('keydown', (e) => {
-  if (e.repeat || e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey) return;
-  if (model?.keyDown(e.key)) e.preventDefault();
+  if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey) return;
+  if (!e.repeat && model?.keyDown(e.key)) { e.preventDefault(); return; }
+  if (view === '3d' && tableScene?.setKey(e.key, true)) e.preventDefault();
 });
-window.addEventListener('keyup', (e) => model?.keyUp(e.key));
+window.addEventListener('keyup', (e) => {
+  model?.keyUp(e.key);
+  tableScene?.setKey(e.key, false);
+});
+window.addEventListener('blur', () => tableScene?.keys.clear());
 
 // ------------------------------------------------------------------ 3D view
 
@@ -295,6 +379,10 @@ async function ensureScene() {
     });
     tableScene.setFurniture($('#furniture').value);
     if (model) tableScene.setModel(model, layout.pointer);
+    if (net) {
+      tableScene.setNet(net);
+      for (const m of stoolStates.values()) tableScene.physics.applyRemote(m);
+    }
   }
   return tableScene;
 }
@@ -320,6 +408,7 @@ furnitureSelect.value = OPTIONS.furniture === 'plinth' ? 'plinth' : 'stools';
 furnitureSelect.addEventListener('change', () => {
   tableScene?.setFurniture(furnitureSelect.value);
   saveParams();
+  sendScene();
 });
 
 for (const b of document.querySelectorAll('[data-view-btn]')) {
@@ -397,7 +486,7 @@ function escapeHtml(s) {
 }
 
 // Handy from the devtools console.
-window.fastSim = { injector, capture, get model() { return model; }, get scene() { return tableScene; }, open, setView };
+window.fastSim = { injector, capture, net, get model() { return model; }, get scene() { return tableScene; }, open, setView };
 
 setInterval(updateStatus, 2000);
 await loadWorks();
@@ -405,5 +494,6 @@ const startWork = OPTIONS.src
   ? { src: OPTIONS.src, layout: OPTIONS.layout || 'touch' }
   : works.find((w) => w.id === OPTIONS.work) || works[0] || { src: defaultSrc(), layout: OPTIONS.layout || 'sandbox' };
 await open(startWork);
+net?.connect(); // after our own start-up, so a shared room's scene wins
 setView(view);
 setupXRButtons();

@@ -17,5 +17,6 @@ copy('public', 'sim');
 copy('node_modules/three/build', 'sim/vendor/three/build');
 copy('node_modules/three/examples/jsm', 'sim/vendor/three/examples/jsm');
 copy('node_modules/html2canvas/dist', 'sim/vendor/html2canvas');
+copy('node_modules/cannon-es/dist', 'sim/vendor/cannon-es');
 fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><meta http-equiv="refresh" content="0; url=sim/">\n');
 console.log(`Built ${path.relative(root, dist)}/ — open sim/index.html from a web server.`);

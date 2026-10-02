@@ -186,6 +186,16 @@ export class FastModel extends EventTarget {
     this.changed(id);
   }
 
+  /** Set the die's face directly (a roll shared from another player). */
+  setFace(id, face) {
+    const t = this.tools.get(id);
+    if (!t || !(face >= 1 && face <= 6)) return;
+    t.state.face = face;
+    t.state.rolls++;
+    if (t.state.detected) this.sendTangible(t, 'moved', toPx(t.state.x, t.state.z), t.state.lastAngle);
+    this.changed(id);
+  }
+
   sendHome(id) {
     const t = this.tools.get(id);
     if (!t) return;
